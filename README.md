@@ -260,6 +260,66 @@ docker compose -f docker-compose.native-ollama.yml down
 
 Do not add `-v` unless you intentionally want to delete PostgreSQL, Grafana, Prometheus, Open WebUI, and container Ollama volumes.
 
+## Temporary public test with Cloudflare Quick Tunnel
+
+Use a [Cloudflare Quick Tunnel](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/do-more-with-tunnels/trycloudflare/) to test Open WebUI from another network without buying a public IP, forwarding router ports, or changing PocketMind's localhost-only port bindings. Quick Tunnels are temporary, have no uptime guarantee, and are not suitable for production.
+
+Before starting, verify that Open WebUI is healthy with the same Compose file arguments used to start the active profile. For example, for the NVIDIA profile:
+
+```text
+docker compose -f docker-compose.yml -f docker-compose.nvidia.yml ps open-webui
+curl http://127.0.0.1:3000/api/config
+```
+
+For the CPU profile use plain `docker compose ps open-webui`; for native Ollama use `docker compose -f docker-compose.native-ollama.yml ps open-webui`. The returned configuration should show authentication enabled and signup disabled. Then start a tunnel on Windows or macOS with Docker Desktop:
+
+```text
+docker pull cloudflare/cloudflared:latest
+docker run --detach \
+  --name pocketmind-cloudflared-quick \
+  --restart no \
+  cloudflare/cloudflared:latest \
+  tunnel --no-autoupdate --url http://host.docker.internal:3000
+```
+
+On Linux, add Docker's host-gateway mapping:
+
+```text
+docker run --detach \
+  --name pocketmind-cloudflared-quick \
+  --restart no \
+  --add-host host.docker.internal:host-gateway \
+  cloudflare/cloudflared:latest \
+  tunnel --no-autoupdate --url http://host.docker.internal:3000
+```
+
+Read the generated public HTTPS URL from the logs:
+
+```text
+docker logs pocketmind-cloudflared-quick
+```
+
+Look for a URL ending in `.trycloudflare.com`, open it from a device on another network, sign in with an existing Open WebUI account, select `corp-general`, and send a test message. Do not publish the temporary URL or any credentials in the repository.
+
+Only Open WebUI port `3000` is proxied by this command. Do not create public tunnels to LiteLLM, PostgreSQL, Ollama, Prometheus, Grafana, or the NVIDIA exporter. In particular, never expose or distribute `LITELLM_MASTER_KEY` as a client API key.
+
+Manage the test tunnel with:
+
+```text
+# Show status and logs
+docker ps --filter name=pocketmind-cloudflared-quick
+docker logs pocketmind-cloudflared-quick
+
+# Stop or resume the existing container
+docker stop pocketmind-cloudflared-quick
+docker start pocketmind-cloudflared-quick
+
+# Remove it when testing is finished
+docker rm -f pocketmind-cloudflared-quick
+```
+
+The `--restart no` policy prevents this temporary public endpoint from silently returning after a Docker or host restart. Restarting the tunnel process can produce a different public URL. If the container name already exists and you intentionally want a fresh tunnel, remove the old container before running `docker run` again. For a stable hostname and access policies, replace Quick Tunnel with a named Cloudflare Tunnel tied to a domain managed in Cloudflare.
+
 ## State portability
 
 Configuration is portable; runtime state is host-local:
