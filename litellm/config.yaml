@@ -1,0 +1,14 @@
+model_list:
+  - model_name: corp-general
+    litellm_params:
+      model: ollama_chat/llama3.2:3b
+      api_base: os.environ/OLLAMA_API_BASE
+
+litellm_settings:
+  success_callback:
+    - prometheus
+
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY
+  database_url: os.environ/DATABASE_URL
+  store_model_in_db: false

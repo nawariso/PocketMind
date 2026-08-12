@@ -1,0 +1,17 @@
+# Local secrets and generated credentials
+.env
+.env.*
+!.env.example
+prometheus/litellm_token
+
+# OS and editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+
+# Local logs and temporary output
+*.log
+tmp/
+temp/

@@ -1,0 +1,41 @@
+name: Portability contract
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  powershell-contracts:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-14, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Profile contract
+        shell: pwsh
+        run: ./tests/profile-contract.ps1
+      - name: Script portability contract
+        shell: pwsh
+        run: ./tests/script-portability.ps1
+
+  compose-contract:
+    runs-on: ubuntu-latest
+    env:
+      POSTGRES_DB: litellm
+      POSTGRES_USER: litellm
+      POSTGRES_PASSWORD: ci-only-password
+      LITELLM_MASTER_KEY: sk-ci-master-key
+      LITELLM_SALT_KEY: sk-ci-salt-key-abcdef1234567890
+      WEBUI_SECRET_KEY: ci-only-webui-secret
+      GRAFANA_ADMIN_USER: admin
+      GRAFANA_ADMIN_PASSWORD: admin
+      OLLAMA_MODEL: llama3.2:3b
+      OLLAMA_CONTEXT_LENGTH: 4096
+      OLLAMA_KEEP_ALIVE: 10m
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configuration contract
+        shell: pwsh
+        run: ./tests/config-contract.ps1

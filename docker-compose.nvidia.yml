@@ -1,0 +1,38 @@
+services:
+  ollama:
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  nvidia-exporter:
+    image: ${NVIDIA_GPU_EXPORTER_IMAGE:-utkuozdemir/nvidia_gpu_exporter:1.13.1-nvml}
+    container_name: pocketmind-nvidia-exporter
+    restart: unless-stopped
+    environment:
+      NVIDIA_VISIBLE_DEVICES: all
+      NVIDIA_DRIVER_CAPABILITIES: utility
+    command: ["--collect.backend=nvml", "--collect.interval=5s"]
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "/usr/bin/nvidia_gpu_exporter", "--version"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks: [ai-net]
+
+  prometheus:
+    volumes:
+      - ./prometheus/prometheus.nvidia.yml:/etc/prometheus/prometheus.yml:ro
+    depends_on:
+      nvidia-exporter:
+        condition: service_healthy
