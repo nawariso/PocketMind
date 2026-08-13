@@ -50,12 +50,15 @@ services:
         condition: service_healthy
     environment:
       OLLAMA_HOST: http://ollama:11434
+      OLLAMA_VISION_MODEL: ${OLLAMA_VISION_MODEL:-gemma4:12b}
     entrypoint: ["/bin/sh", "-c"]
     command:
       - >
         echo "Pulling ${OLLAMA_MODEL}..." &&
         ollama pull ${OLLAMA_MODEL} &&
-        echo "Model ${OLLAMA_MODEL} is ready."
+        echo "Pulling $${OLLAMA_VISION_MODEL}..." &&
+        ollama pull $${OLLAMA_VISION_MODEL} &&
+        echo "Models ${OLLAMA_MODEL} and $${OLLAMA_VISION_MODEL} are ready."
     networks: [ai-net]
 
   litellm:

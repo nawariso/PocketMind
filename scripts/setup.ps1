@@ -16,14 +16,19 @@ try {
     $envValues = Get-PocEnv
 
     if ($resolvedProfile -eq 'native') {
-        $modelName = $envValues['OLLAMA_MODEL']
+        $modelNames = @($envValues['OLLAMA_MODEL'])
+        $visionModelName = $envValues['OLLAMA_VISION_MODEL']
+        if ([string]::IsNullOrWhiteSpace($visionModelName)) { $visionModelName = 'gemma4:12b' }
+        $modelNames += $visionModelName
         $modelList = (& ollama list) -join "`n"
-        if ($modelList -notmatch [regex]::Escape($modelName)) {
-            if (-not $Pull) {
-                throw "Native Ollama model '$modelName' is missing. Run: ollama pull $modelName (or rerun setup with -Pull)."
+        foreach ($modelName in $modelNames) {
+            if ($modelList -notmatch [regex]::Escape($modelName)) {
+                if (-not $Pull) {
+                    throw "Native Ollama model '$modelName' is missing. Run: ollama pull $modelName (or rerun setup with -Pull)."
+                }
+                & ollama pull $modelName
+                if ($LASTEXITCODE -ne 0) { throw "Failed to pull native Ollama model: $modelName" }
             }
-            & ollama pull $modelName
-            if ($LASTEXITCODE -ne 0) { throw "Failed to pull native Ollama model: $modelName" }
         }
     }
 

@@ -15,7 +15,7 @@ flowchart LR
     Prometheus --> Grafana["Grafana<br/>localhost:3001"]
 ```
 
-The client-facing model name is always `corp-general`. The initial physical model is `llama3.2:3b`.
+The default text model is `corp-general` (`llama3.2:3b`). The stack also installs the multimodal model `corp-vision` (`gemma4:12b`) for complex prompts and image-to-text/OCR experiments.
 
 ## Support matrix
 
@@ -43,8 +43,8 @@ Plain `docker compose up -d` is intentionally the portable CPU-safe stack, but u
 
 - Docker Desktop or Docker Engine with a current Compose v2 release that supports inline `configs.content`
 - PowerShell 7 (`pwsh`) for the portable automation scripts
-- At least 8 GB RAM; 16 GB or more is recommended when Docker Desktop and the model run together
-- Several GB of free disk space for images, model files, and volumes
+- At least 8 GB RAM for `corp-general`; `corp-vision` was runtime-tested on a 24 GB Windows host, where loading it caused significant memory pressure
+- Several GB of free disk space for images, model files, and volumes; check the current `gemma4:12b` registry size before installation
 
 PowerShell 7 installation: [Microsoft documentation](https://learn.microsoft.com/powershell/scripting/install/installing-powershell). The scripts also remain compatible with Windows PowerShell 5.1.
 
@@ -170,7 +170,25 @@ The prerequisite checker refuses to start while any secret still has a `CHANGE_M
 
 ## Open WebUI login
 
-Open `http://localhost:3000`. On a fresh volume, create the first local account and select `corp-general`. Open WebUI connects only to LiteLLM; direct Ollama access is disabled.
+Open `http://localhost:3000`. On a fresh volume, create the first local account and select `corp-general` for fast text work or `corp-vision` for image input. Open WebUI connects only to LiteLLM; direct Ollama access is disabled.
+
+## Vision and OCR with Gemma 4
+
+`corp-vision` routes to the official Ollama tag `gemma4:12b`. Gemma 4 12B is multimodal and can accept text plus images, but it is a generative vision model rather than a deterministic OCR engine. Review important transcriptions against the original image.
+
+In Open WebUI, start a new chat, select `corp-vision`, attach an image, disable Thinking for transcription, and use a constrained prompt such as:
+
+```text
+Transcribe every visible character exactly as written. Preserve line breaks and table structure.
+Do not summarize, translate, correct spelling, or invent unreadable text.
+Write [ILLEGIBLE] wherever the image cannot be read confidently.
+```
+
+Thinking can consume the output-token budget before the final transcription and produce a truncated answer. For API OCR requests, send `"extra_body": {"think": false}` and allow at least 256 output tokens. Enable Thinking again for complex reasoning tasks.
+
+For complex text-only work, select `corp-vision` and omit the image. Keep `corp-general` for quicker responses and lower memory use.
+
+The 12B model does not fit entirely in a 4 GB RTX 3050 Laptop GPU. Ollama will offload part of it to system RAM/CPU, so first-token latency can be high and concurrent requests are not recommended on that hardware. If the 12B model is too slow, select a smaller official Gemma 4 vision tag supported by the installed Ollama version and update both `OLLAMA_VISION_MODEL` and the physical model in `litellm/config.yaml` together.
 
 ## Test the API key
 

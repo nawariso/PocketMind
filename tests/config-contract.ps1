@@ -284,6 +284,26 @@ function Test-PrometheusTokenConfigContract {
     }
 }
 
+function Test-VisionModelContract {
+    $litellmConfig = Get-Content -Raw -LiteralPath (Join-Path $repoRoot 'litellm/config.yaml')
+    Assert-True -Condition ($litellmConfig.Contains('model_name: corp-vision')) `
+        -Message 'LiteLLM must expose the corp-vision alias'
+    Assert-True -Condition ($litellmConfig.Contains('model: ollama_chat/gemma4:12b')) `
+        -Message 'corp-vision must route to gemma4:12b through ollama_chat'
+    Assert-True -Condition ($litellmConfig.Contains('supports_vision: true')) `
+        -Message 'corp-vision must advertise vision capability'
+
+    $composeContent = Get-Content -Raw -LiteralPath (Join-Path $repoRoot 'docker-compose.yml')
+    Assert-True -Condition ($composeContent.Contains('OLLAMA_VISION_MODEL: ${OLLAMA_VISION_MODEL:-gemma4:12b}')) `
+        -Message 'Container Ollama setup must define the Gemma 4 vision model'
+    Assert-True -Condition ($composeContent.Contains('ollama pull $${OLLAMA_VISION_MODEL}')) `
+        -Message 'Container Ollama setup must pull the configured vision model'
+
+    $envExample = Get-Content -Raw -LiteralPath (Join-Path $repoRoot '.env.example')
+    Assert-True -Condition ($envExample.Contains('OLLAMA_VISION_MODEL=gemma4:12b')) `
+        -Message '.env.example must document the Gemma 4 vision model'
+}
+
 function Test-SecretPlaceholderGuardContract {
     $commonScript = Get-Content -Raw -LiteralPath (Join-Path $repoRoot 'scripts/common.ps1')
     $prerequisiteScript = Get-Content -Raw -LiteralPath (Join-Path $repoRoot 'scripts/check-prerequisites.ps1')
@@ -309,6 +329,7 @@ try {
     Test-MonitoringContract
     Test-VerificationScriptContract
     Test-PrometheusTokenConfigContract
+    Test-VisionModelContract
     Test-SecretPlaceholderGuardContract
 }
 finally {
