@@ -1,7 +1,7 @@
 model_list:
   - model_name: corp-general
     litellm_params:
-      model: ollama_chat/llama3.2:3b
+      model: ollama_chat/qwen3:4b-instruct-2507-q4_K_M
       api_base: os.environ/OLLAMA_API_BASE
 
   - model_name: corp-ocr

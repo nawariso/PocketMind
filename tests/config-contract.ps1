@@ -284,6 +284,21 @@ function Test-PrometheusTokenConfigContract {
     }
 }
 
+function Test-GeneralModelContract {
+    $expectedModel = 'qwen3:4b-instruct-2507-q4_K_M'
+    $litellmConfig = Get-Content -Raw -LiteralPath (Join-Path $repoRoot 'litellm/config.yaml')
+    Assert-True -Condition ($litellmConfig.Contains("model: ollama_chat/$expectedModel")) `
+        -Message "corp-general must route to exact model $expectedModel"
+
+    $envExample = Get-Content -Raw -LiteralPath (Join-Path $repoRoot '.env.example')
+    Assert-True -Condition ($envExample.Contains("OLLAMA_MODEL=$expectedModel")) `
+        -Message ".env.example must use exact model $expectedModel"
+
+    $readmeContent = Get-Content -Raw -LiteralPath (Join-Path $repoRoot 'README.md')
+    Assert-True -Condition ($readmeContent.Contains(('corp-general` (`{0}`)' -f $expectedModel))) `
+        -Message "README must document exact model $expectedModel"
+}
+
 function Test-OcrModelContract {
     $litellmConfig = Get-Content -Raw -LiteralPath (Join-Path $repoRoot 'litellm/config.yaml')
     Assert-True -Condition ($litellmConfig.Contains('model_name: corp-ocr')) `
@@ -342,6 +357,7 @@ try {
     Test-MonitoringContract
     Test-VerificationScriptContract
     Test-PrometheusTokenConfigContract
+    Test-GeneralModelContract
     Test-OcrModelContract
     Test-SecretPlaceholderGuardContract
 }

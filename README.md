@@ -15,7 +15,7 @@ flowchart LR
     Prometheus --> Grafana["Grafana<br/>localhost:3001"]
 ```
 
-The default text model is `corp-general` (`llama3.2:3b`). The stack also installs `corp-ocr` (`scb10x/typhoon-ocr1.5-3b`), the Typhoon-recommended Ollama build for Thai and English document OCR.
+The default text model is `corp-general` (`qwen3:4b-instruct-2507-q4_K_M`). It is a text-only Qwen 3 4B Instruct Q4 model selected for stronger Thai, reasoning, coding, and tool calling than the previous Llama 3.2 3B while remaining practical on a 4 GB laptop GPU through partial CPU/RAM offload. The stack also installs `corp-ocr` (`scb10x/typhoon-ocr1.5-3b`), the Typhoon-recommended Ollama build for Thai and English document OCR.
 
 ## Support matrix
 
@@ -123,7 +123,7 @@ The NVIDIA exporter listens on port `9835` only inside the Compose network. It i
 Docker Desktop for macOS cannot pass the Apple GPU into an ordinary Linux container. Install Ollama natively so it can use Metal:
 
 ```powershell
-ollama pull llama3.2:3b
+ollama pull qwen3:4b-instruct-2507-q4_K_M
 pwsh ./scripts/setup.ps1 -Profile native
 pwsh ./scripts/verify-stack.ps1 -Profile native
 ```
