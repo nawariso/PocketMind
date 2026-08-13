@@ -17,6 +17,8 @@ flowchart LR
 
 The default text model is `corp-general` (`qwen3:4b-instruct-2507-q4_K_M`). It is a text-only Qwen 3 4B Instruct Q4 model selected for stronger Thai, reasoning, coding, and tool calling than the previous Llama 3.2 3B while remaining practical on a 4 GB laptop GPU through partial CPU/RAM offload. The stack also installs `corp-ocr` (`scb10x/typhoon-ocr1.5-3b`), the Typhoon-recommended Ollama build for Thai and English document OCR.
 
+For current architecture, operations, model decisions, security, backup/restore, and troubleshooting knowledge, start with the [Documentation index](docs/README.md). Files under `docs/superpowers/` are historical implementation plans and design snapshots, not the current operational source of truth.
+
 ## Support matrix
 
 | Host | Architecture | Recommended profile | Acceleration | Status |
