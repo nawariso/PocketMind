@@ -186,6 +186,8 @@ Write [ILLEGIBLE] wherever the image cannot be read confidently.
 
 Thinking can consume the output-token budget before the final transcription and produce a truncated answer. For API OCR requests, send `"extra_body": {"think": false}` and allow at least 256 output tokens. Enable Thinking again for complex reasoning tasks.
 
+Image inputs consume context tokens. The stack defaults Ollama to an 8192-token context so typical OCR images fit; if Ollama reports `request (...) exceeds the available context size`, increase `OLLAMA_CONTEXT_LENGTH` in the private `.env` and recreate the Ollama container. Larger contexts consume more RAM and KV-cache memory.
+
 For complex text-only work, select `corp-vision` and omit the image. Keep `corp-general` for quicker responses and lower memory use.
 
 The 12B model does not fit entirely in a 4 GB RTX 3050 Laptop GPU. Ollama will offload part of it to system RAM/CPU, so first-token latency can be high and concurrent requests are not recommended on that hardware. If the 12B model is too slow, select a smaller official Gemma 4 vision tag supported by the installed Ollama version and update both `OLLAMA_VISION_MODEL` and the physical model in `litellm/config.yaml` together.

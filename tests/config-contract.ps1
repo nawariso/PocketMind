@@ -302,6 +302,11 @@ function Test-VisionModelContract {
     $envExample = Get-Content -Raw -LiteralPath (Join-Path $repoRoot '.env.example')
     Assert-True -Condition ($envExample.Contains('OLLAMA_VISION_MODEL=gemma4:12b')) `
         -Message '.env.example must document the Gemma 4 vision model'
+    Assert-True -Condition ($envExample.Contains('OLLAMA_CONTEXT_LENGTH=8192')) `
+        -Message '.env.example must provide enough context for Gemma 4 image prompts'
+
+    Assert-True -Condition ($composeContent.Contains('OLLAMA_CONTEXT_LENGTH: ${OLLAMA_CONTEXT_LENGTH:-8192}')) `
+        -Message 'Container Ollama must default to at least 8192 context tokens for image prompts'
 }
 
 function Test-SecretPlaceholderGuardContract {
