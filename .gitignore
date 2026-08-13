@@ -15,3 +15,6 @@ Thumbs.db
 *.log
 tmp/
 temp/
+
+# Local repository references (never commit)
+/ref/
