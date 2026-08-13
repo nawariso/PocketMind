@@ -80,6 +80,35 @@ pwsh ./scripts/setup.ps1 -Profile auto -Pull
 
 The script does not install Docker, PowerShell, GPU drivers, NVIDIA Container Toolkit, or native Ollama. Those host dependencies must be installed first. On macOS Apple Silicon, `auto` selects the `native` profile, so Ollama must already be installed and running; `-Pull` downloads the configured model if it is missing. On Windows and Linux, `auto` selects NVIDIA only after a successful Docker GPU probe and otherwise falls back to CPU.
 
+## Model Lab: try another Ollama model without editing config
+
+Model Lab adds temporary aliases through LiteLLM's database-backed model-management API, so production aliases in `litellm/config.yaml` remain unchanged and LiteLLM does not need to restart. Always use an exact Ollama tag and a separate alias beginning with `lab-`.
+
+Add and download a model:
+
+```powershell
+pwsh ./scripts/model-lab.ps1 add -Model qwen3:8b -Alias lab-qwen3-8b -Profile auto
+```
+
+List Model Lab aliases and run a timed prompt:
+
+```powershell
+pwsh ./scripts/model-lab.ps1 list
+pwsh ./scripts/model-lab.ps1 test -Alias lab-qwen3-8b -Prompt 'อธิบายข้อดีข้อเสียของ local AI แบบสั้น ๆ'
+```
+
+Remove only the LiteLLM alias, leaving downloaded Ollama weights available for later:
+
+```powershell
+pwsh ./scripts/model-lab.ps1 remove -Alias lab-qwen3-8b
+```
+
+To remove both the alias and downloaded weights, append `-DeleteWeights`. The script refuses aliases outside the `lab-` namespace and refuses to delete the physical models behind `corp-general` or `corp-ocr`. Before downloading, check the model's registry page, quantization, disk size, modalities, and tool support. A model that downloads successfully can still be too slow or memory-heavy for this machine. Model Lab aliases persist in PostgreSQL across LiteLLM restarts.
+
+The local CLI can test a lab alias immediately. Open WebUI administrators also see the alias after refreshing the browser. Regular Open WebUI users do not receive access automatically: an administrator must create a Workspace Model that uses the `lab-*` alias as its base model, then grant the intended users or `user:*` read access. This separation prevents newly downloaded experimental models from becoming available to every tester without review.
+
+The namespace and deletion guards are protections implemented by `model-lab.ps1`, not server-side LiteLLM authorization rules. Treat the LiteLLM master key as an administrator credential: anyone holding it can call model-management endpoints directly and bypass the script. Never expose that key through Open WebUI, a public tunnel, Postman collections, logs, or source control.
+
 On Windows PowerShell 5.1, use:
 
 ```powershell

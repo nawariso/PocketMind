@@ -9,6 +9,7 @@ Set-StrictMode -Version Latest
 
 try {
     $resolvedProfile = Resolve-PocProfile -RequestedProfile $Profile -NativeOllama:$NativeOllama
+    $envValues = Get-PocEnv
     $requiredContainers = @(
         'pocketmind-postgres',
         'pocketmind-litellm',
@@ -132,7 +133,11 @@ try {
         $modelList = & docker exec $ollamaContainer ollama list
         $processorList = & docker exec $ollamaContainer ollama ps
     }
-    if (($modelList -join "`n") -notmatch 'llama3\.2:3b') { throw 'Ollama model llama3.2:3b is not installed.' }
+    $expectedModel = $envValues['OLLAMA_MODEL']
+    if ([string]::IsNullOrWhiteSpace($expectedModel)) { throw 'OLLAMA_MODEL is missing from .env.' }
+    if (($modelList -join "`n") -notmatch [regex]::Escape($expectedModel)) {
+        throw "Ollama model $expectedModel is not installed."
+    }
     if ($resolvedProfile -eq 'nvidia' -and ($processorList -join "`n") -notmatch 'GPU') {
         throw 'Ollama does not report GPU placement after inference.'
     }
