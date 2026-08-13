@@ -176,7 +176,7 @@ Open `http://localhost:3000`. On a fresh volume, create the first local account 
 
 `corp-ocr` routes to `scb10x/typhoon-ocr1.5-3b`, the on-device Ollama build recommended by the Typhoon OCR 1.5 authors. The exact Hugging Face checkpoint `typhoon-ai/typhoon-ocr1.5-2b` uses Qwen3-VL 2B; the recommended Ollama build uses a quantized Qwen2.5-VL 3B model. This distinction is intentional because the authors warn that third-party GGUF conversions may reduce OCR accuracy.
 
-This is a task-specific OCR model, not a general chat or VQA model. Start a new Open WebUI chat, select `corp-ocr`, attach one document image, set temperature to `0.1`, and use the model's required prompt:
+This is a task-specific OCR model, not a general chat or VQA model. Its Ollama build supports completion and vision but not tool calling. In Open WebUI, keep `Built-in Tools: Off` for `corp-ocr`; otherwise Open WebUI can attach a `tools` payload and Ollama will reject the request. Start a new chat, select `corp-ocr`, attach one document image, set temperature to `0.1`, and use the model's required prompt:
 
 ```text
 Extract all text from the image.

@@ -311,6 +311,10 @@ function Test-OcrModelContract {
 
     Assert-True -Condition ($composeContent.Contains('OLLAMA_CONTEXT_LENGTH: ${OLLAMA_CONTEXT_LENGTH:-8192}')) `
         -Message 'Container Ollama must default to at least 8192 context tokens for image prompts'
+
+    $readmeContent = Get-Content -Raw -LiteralPath (Join-Path $repoRoot 'README.md')
+    Assert-True -Condition ($readmeContent.Contains('Built-in Tools: Off')) `
+        -Message 'README must require Built-in Tools to be disabled for the OCR-only model'
 }
 
 function Test-SecretPlaceholderGuardContract {
