@@ -82,7 +82,28 @@ The script does not install Docker, PowerShell, GPU drivers, NVIDIA Container To
 
 ## Model Lab: try another Ollama model without editing config
 
-Model Lab adds temporary aliases through LiteLLM's database-backed model-management API, so production aliases in `litellm/config.yaml` remain unchanged and LiteLLM does not need to restart. Always use an exact Ollama tag and a separate alias beginning with `lab-`.
+Model Lab downloads an exact Ollama model tag and registers a separate `lab-*` alias through LiteLLM's database-backed model-management API. Production aliases in `litellm/config.yaml` remain unchanged, aliases persist across LiteLLM restarts, and adding or removing an alias does not require a LiteLLM restart.
+
+### Model Lab prerequisites
+
+Before using Model Lab:
+
+- Complete the normal PocketMind setup and keep Ollama, LiteLLM, and PostgreSQL running.
+- Configure the private `.env`; the script reads the LiteLLM master key locally and never accepts it as a command-line argument.
+- Verify the exact tag on the Ollama registry page. Check download size, quantization, context, modalities, tool support, and license.
+- Check available disk, RAM, and VRAM. A successful download proves availability, not acceptable speed or memory fit.
+- Use `-Profile auto` unless you intentionally run `cpu`, `native`, or `nvidia`. The profile controls whether the script calls native Ollama or the Ollama container.
+
+### Model Lab command reference
+
+| Action | Required input | Important options | Behavior |
+|---|---|---|---|
+| `add` | `-Model <exact-tag>` | `-Alias lab-*`, `-Profile auto` | Pulls and inspects the model, creates a persistent LiteLLM alias, and verifies discovery. |
+| `list` | none | `-Profile auto` | Lists Model Lab aliases, physical models, and deployment IDs. |
+| `test` | `-Alias lab-*` | `-Prompt`, `-MaxTokens` | Sends one deterministic text chat request and reports latency and output tokens. `-MaxTokens` defaults to `128` and accepts `8`–`2048`. |
+| `remove` | `-Alias lab-*` | `-DeleteWeights` | Removes the LiteLLM alias; weights are retained unless explicitly requested. |
+
+`-Alias` is optional for `add`; if omitted, the script derives a lowercase `lab-*` alias from the physical model name. Supplying an explicit short alias is recommended because it is easier to recognize in Open WebUI and test output. Aliases may contain lowercase letters, numbers, dot, underscore, and dash.
 
 Add and download a model:
 
@@ -90,26 +111,76 @@ Add and download a model:
 pwsh ./scripts/model-lab.ps1 add -Model qwen3:8b -Alias lab-qwen3-8b -Profile auto
 ```
 
-List Model Lab aliases and run a timed prompt:
+List registered lab aliases:
 
 ```powershell
-pwsh ./scripts/model-lab.ps1 list
-pwsh ./scripts/model-lab.ps1 test -Alias lab-qwen3-8b -Prompt 'อธิบายข้อดีข้อเสียของ local AI แบบสั้น ๆ'
+pwsh ./scripts/model-lab.ps1 list -Profile auto
 ```
 
-Remove only the LiteLLM alias, leaving downloaded Ollama weights available for later:
+Run a timed text test with a larger output budget:
 
 ```powershell
-pwsh ./scripts/model-lab.ps1 remove -Alias lab-qwen3-8b
+pwsh ./scripts/model-lab.ps1 test -Alias lab-qwen3-8b `
+  -Prompt 'อธิบายข้อดีข้อเสียของ local AI แบบสั้น ๆ' `
+  -MaxTokens 256 `
+  -Profile auto
 ```
 
-To remove both the alias and downloaded weights, append `-DeleteWeights`. The script refuses aliases outside the `lab-` namespace and refuses to delete the physical models behind `corp-general` or `corp-ocr`. Before downloading, check the model's registry page, quantization, disk size, modalities, and tool support. A model that downloads successfully can still be too slow or memory-heavy for this machine. Model Lab aliases persist in PostgreSQL across LiteLLM restarts.
+The reported wall-clock rate includes request overhead and may include model load or warm-up time. Run the same test at least twice: treat the first run as cold-start behavior and later runs as warm behavior. Compare answer quality as well as latency.
+
+The built-in `test` action exercises text chat only. It does not prove image input, OCR accuracy, thinking behavior, structured output, or tool calling. Test those capabilities separately with a known fixture and the model's declared capabilities before relying on them.
+
+Remove only the LiteLLM alias and retain downloaded Ollama weights:
+
+```powershell
+pwsh ./scripts/model-lab.ps1 remove -Alias lab-qwen3-8b -Profile auto
+```
+
+Remove both the alias and downloaded weights:
+
+```powershell
+pwsh ./scripts/model-lab.ps1 remove -Alias lab-qwen3-8b -DeleteWeights -Profile auto
+```
+
+Without `-DeleteWeights`, adding the same physical model again can reuse the local weights. With `-DeleteWeights`, the script refuses to remove a production model or weights still referenced by another lab alias.
+
+Windows PowerShell 5.1 uses the same actions with the compatibility invocation form:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\model-lab.ps1 add -Model qwen3:8b -Alias lab-qwen3-8b -Profile auto
+powershell -ExecutionPolicy Bypass -File .\scripts\model-lab.ps1 test -Alias lab-qwen3-8b -MaxTokens 256 -Profile auto
+powershell -ExecutionPolicy Bypass -File .\scripts\model-lab.ps1 remove -Alias lab-qwen3-8b -Profile auto
+```
+
+### Recommended Model Lab workflow
+
+1. Verify the exact Ollama tag and estimate whether its quantized weights plus an 8192-token context fit this machine.
+2. Run `add` with a unique `lab-*` alias. Never reuse `corp-general` or `corp-ocr` for an experiment.
+3. Run `list` to confirm the alias-to-physical-model mapping.
+4. Run the same `test` prompt at least twice and record cold and warm latency.
+5. Test the actual workload separately: Thai, reasoning, coding, tools, vision, or OCR as applicable.
+6. Inspect placement with `docker exec pocketmind-ollama ollama ps` for container profiles or `ollama ps` for the native profile. Avoid concurrent large-model requests on memory-constrained hardware.
+7. If the model is not useful, run `remove`; add `-DeleteWeights` only when no other lab alias needs the same weights.
+8. If the model should replace a production alias, update the version-controlled config and normal contracts in a separate reviewed change. Model Lab does not promote a model automatically.
+
+### Open WebUI access
 
 The local CLI can test a lab alias immediately. Open WebUI administrators also see the alias after refreshing the browser. Regular Open WebUI users do not receive access automatically: an administrator must create a Workspace Model that uses the `lab-*` alias as its base model, then grant the intended users or `user:*` read access. This separation prevents newly downloaded experimental models from becoming available to every tester without review.
 
+### Model Lab troubleshooting
+
+- **Alias already exists:** run `list`, choose another `lab-*` alias, or remove the old alias first.
+- **Alias is absent in Open WebUI:** hard-refresh or sign out/in. Admins should see the base alias; regular users need a Workspace Model and explicit read grant.
+- **Download succeeds but inference is slow:** inspect `ollama ps` placement, shorten context/history, close other GPU workloads, and compare warm runs. Models larger than VRAM will offload to CPU/RAM.
+- **Test times out:** each Model Lab text test has a 300-second request timeout. A timeout usually means the model is too slow, still loading, or under memory pressure; inspect `ollama ps` and runtime logs before retrying.
+- **Out of memory or context errors:** stop other model requests, start a new chat, reduce prompt/history, or remove the candidate. Do not raise context blindly because KV-cache memory also grows.
+- **Tool or image errors:** confirm the model advertises the capability. Do not send tools to a completion/vision-only model, and do not assume a text model accepts images.
+- **Remove keeps disk usage:** this is expected without `-DeleteWeights`; run the explicit deletion form only after confirming the physical model is not shared.
+- **Partial add failure:** the script attempts to roll back the database deployment. Run `list` afterward and remove any remaining `lab-*` alias before retrying.
+
 The namespace and deletion guards are protections implemented by `model-lab.ps1`, not server-side LiteLLM authorization rules. Treat the LiteLLM master key as an administrator credential: anyone holding it can call model-management endpoints directly and bypass the script. Never expose that key through Open WebUI, a public tunnel, Postman collections, logs, or source control.
 
-On Windows PowerShell 5.1, use:
+For the normal stack setup on Windows PowerShell 5.1, use:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\setup.ps1 -Profile auto -Pull

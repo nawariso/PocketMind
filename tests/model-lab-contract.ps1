@@ -34,9 +34,21 @@ Assert-True -Condition ($config.Contains('store_model_in_db: true')) `
 $readme = Get-Content -Raw -LiteralPath (Join-Path $repoRoot 'README.md')
 foreach ($term in @(
     '## Model Lab: try another Ollama model without editing config',
+    '### Model Lab prerequisites',
+    '### Model Lab command reference',
+    '### Recommended Model Lab workflow',
+    '### Model Lab troubleshooting',
     'pwsh ./scripts/model-lab.ps1 add',
+    'pwsh ./scripts/model-lab.ps1 list',
     'pwsh ./scripts/model-lab.ps1 test',
     'pwsh ./scripts/model-lab.ps1 remove',
+    '-MaxTokens 256',
+    'defaults to `128` and accepts `8`–`2048`',
+    '300-second request timeout',
+    '-DeleteWeights',
+    'warm-up',
+    'text chat only',
+    'powershell -ExecutionPolicy Bypass -File .\scripts\model-lab.ps1',
     'lab-'
 )) {
     Assert-True -Condition ($readme.Contains($term)) -Message "README is missing Model Lab guidance: $term"
