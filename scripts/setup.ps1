@@ -17,9 +17,9 @@ try {
 
     if ($resolvedProfile -eq 'native') {
         $modelNames = @($envValues['OLLAMA_MODEL'])
-        $visionModelName = $envValues['OLLAMA_VISION_MODEL']
-        if ([string]::IsNullOrWhiteSpace($visionModelName)) { $visionModelName = 'gemma4:12b' }
-        $modelNames += $visionModelName
+        $ocrModelName = $envValues['OLLAMA_OCR_MODEL']
+        if ([string]::IsNullOrWhiteSpace($ocrModelName)) { $ocrModelName = 'scb10x/typhoon-ocr1.5-3b' }
+        $modelNames += $ocrModelName
         $modelList = (& ollama list) -join "`n"
         foreach ($modelName in $modelNames) {
             if ($modelList -notmatch [regex]::Escape($modelName)) {

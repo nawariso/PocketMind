@@ -284,26 +284,30 @@ function Test-PrometheusTokenConfigContract {
     }
 }
 
-function Test-VisionModelContract {
+function Test-OcrModelContract {
     $litellmConfig = Get-Content -Raw -LiteralPath (Join-Path $repoRoot 'litellm/config.yaml')
-    Assert-True -Condition ($litellmConfig.Contains('model_name: corp-vision')) `
-        -Message 'LiteLLM must expose the corp-vision alias'
-    Assert-True -Condition ($litellmConfig.Contains('model: ollama_chat/gemma4:12b')) `
-        -Message 'corp-vision must route to gemma4:12b through ollama_chat'
+    Assert-True -Condition ($litellmConfig.Contains('model_name: corp-ocr')) `
+        -Message 'LiteLLM must expose the corp-ocr alias'
+    Assert-True -Condition ($litellmConfig.Contains('model: ollama_chat/scb10x/typhoon-ocr1.5-3b')) `
+        -Message 'corp-ocr must route to the official Typhoon OCR Ollama build'
     Assert-True -Condition ($litellmConfig.Contains('supports_vision: true')) `
-        -Message 'corp-vision must advertise vision capability'
+        -Message 'corp-ocr must advertise vision capability'
+    Assert-True -Condition (-not $litellmConfig.Contains('gemma4:12b')) `
+        -Message 'LiteLLM must not retain the replaced Gemma 4 model'
 
     $composeContent = Get-Content -Raw -LiteralPath (Join-Path $repoRoot 'docker-compose.yml')
-    Assert-True -Condition ($composeContent.Contains('OLLAMA_VISION_MODEL: ${OLLAMA_VISION_MODEL:-gemma4:12b}')) `
-        -Message 'Container Ollama setup must define the Gemma 4 vision model'
-    Assert-True -Condition ($composeContent.Contains('ollama pull $${OLLAMA_VISION_MODEL}')) `
-        -Message 'Container Ollama setup must pull the configured vision model'
+    Assert-True -Condition ($composeContent.Contains('OLLAMA_OCR_MODEL: ${OLLAMA_OCR_MODEL:-scb10x/typhoon-ocr1.5-3b}')) `
+        -Message 'Container Ollama setup must define the official Typhoon OCR model'
+    Assert-True -Condition ($composeContent.Contains('ollama pull $${OLLAMA_OCR_MODEL}')) `
+        -Message 'Container Ollama setup must pull the configured OCR model'
+    Assert-True -Condition (-not $composeContent.Contains('OLLAMA_VISION_MODEL')) `
+        -Message 'Container setup must not retain the replaced generic vision-model setting'
 
     $envExample = Get-Content -Raw -LiteralPath (Join-Path $repoRoot '.env.example')
-    Assert-True -Condition ($envExample.Contains('OLLAMA_VISION_MODEL=gemma4:12b')) `
-        -Message '.env.example must document the Gemma 4 vision model'
+    Assert-True -Condition ($envExample.Contains('OLLAMA_OCR_MODEL=scb10x/typhoon-ocr1.5-3b')) `
+        -Message '.env.example must document the official Typhoon OCR Ollama build'
     Assert-True -Condition ($envExample.Contains('OLLAMA_CONTEXT_LENGTH=8192')) `
-        -Message '.env.example must provide enough context for Gemma 4 image prompts'
+        -Message '.env.example must provide enough context for OCR image prompts'
 
     Assert-True -Condition ($composeContent.Contains('OLLAMA_CONTEXT_LENGTH: ${OLLAMA_CONTEXT_LENGTH:-8192}')) `
         -Message 'Container Ollama must default to at least 8192 context tokens for image prompts'
@@ -334,7 +338,7 @@ try {
     Test-MonitoringContract
     Test-VerificationScriptContract
     Test-PrometheusTokenConfigContract
-    Test-VisionModelContract
+    Test-OcrModelContract
     Test-SecretPlaceholderGuardContract
 }
 finally {

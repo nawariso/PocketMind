@@ -4,9 +4,9 @@ model_list:
       model: ollama_chat/llama3.2:3b
       api_base: os.environ/OLLAMA_API_BASE
 
-  - model_name: corp-vision
+  - model_name: corp-ocr
     litellm_params:
-      model: ollama_chat/gemma4:12b
+      model: ollama_chat/scb10x/typhoon-ocr1.5-3b
       api_base: os.environ/OLLAMA_API_BASE
     model_info:
       supports_vision: true

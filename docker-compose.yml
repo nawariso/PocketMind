@@ -50,15 +50,15 @@ services:
         condition: service_healthy
     environment:
       OLLAMA_HOST: http://ollama:11434
-      OLLAMA_VISION_MODEL: ${OLLAMA_VISION_MODEL:-gemma4:12b}
+      OLLAMA_OCR_MODEL: ${OLLAMA_OCR_MODEL:-scb10x/typhoon-ocr1.5-3b}
     entrypoint: ["/bin/sh", "-c"]
     command:
       - >
         echo "Pulling ${OLLAMA_MODEL}..." &&
         ollama pull ${OLLAMA_MODEL} &&
-        echo "Pulling $${OLLAMA_VISION_MODEL}..." &&
-        ollama pull $${OLLAMA_VISION_MODEL} &&
-        echo "Models ${OLLAMA_MODEL} and $${OLLAMA_VISION_MODEL} are ready."
+        echo "Pulling $${OLLAMA_OCR_MODEL}..." &&
+        ollama pull $${OLLAMA_OCR_MODEL} &&
+        echo "Models ${OLLAMA_MODEL} and $${OLLAMA_OCR_MODEL} are ready."
     networks: [ai-net]
 
   litellm:

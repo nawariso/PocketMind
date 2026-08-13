@@ -15,7 +15,7 @@ flowchart LR
     Prometheus --> Grafana["Grafana<br/>localhost:3001"]
 ```
 
-The default text model is `corp-general` (`llama3.2:3b`). The stack also installs the multimodal model `corp-vision` (`gemma4:12b`) for complex prompts and image-to-text/OCR experiments.
+The default text model is `corp-general` (`llama3.2:3b`). The stack also installs `corp-ocr` (`scb10x/typhoon-ocr1.5-3b`), the Typhoon-recommended Ollama build for Thai and English document OCR.
 
 ## Support matrix
 
@@ -43,8 +43,8 @@ Plain `docker compose up -d` is intentionally the portable CPU-safe stack, but u
 
 - Docker Desktop or Docker Engine with a current Compose v2 release that supports inline `configs.content`
 - PowerShell 7 (`pwsh`) for the portable automation scripts
-- At least 8 GB RAM for `corp-general`; `corp-vision` was runtime-tested on a 24 GB Windows host, where loading it caused significant memory pressure
-- Several GB of free disk space for images, model files, and volumes; check the current `gemma4:12b` registry size before installation
+- At least 8 GB RAM; 16 GB or more is recommended when Docker Desktop and OCR run together
+- Several GB of free disk space for images, model files, and volumes; the Typhoon Ollama model currently downloads about 3.2 GB
 
 PowerShell 7 installation: [Microsoft documentation](https://learn.microsoft.com/powershell/scripting/install/installing-powershell). The scripts also remain compatible with Windows PowerShell 5.1.
 
@@ -170,27 +170,30 @@ The prerequisite checker refuses to start while any secret still has a `CHANGE_M
 
 ## Open WebUI login
 
-Open `http://localhost:3000`. On a fresh volume, create the first local account and select `corp-general` for fast text work or `corp-vision` for image input. Open WebUI connects only to LiteLLM; direct Ollama access is disabled.
+Open `http://localhost:3000`. On a fresh volume, create the first local account and select `corp-general` for general text work or `corp-ocr` for document images. Open WebUI connects only to LiteLLM; direct Ollama access is disabled.
 
-## Vision and OCR with Gemma 4
+## Thai and English OCR with Typhoon
 
-`corp-vision` routes to the official Ollama tag `gemma4:12b`. Gemma 4 12B is multimodal and can accept text plus images, but it is a generative vision model rather than a deterministic OCR engine. Review important transcriptions against the original image.
+`corp-ocr` routes to `scb10x/typhoon-ocr1.5-3b`, the on-device Ollama build recommended by the Typhoon OCR 1.5 authors. The exact Hugging Face checkpoint `typhoon-ai/typhoon-ocr1.5-2b` uses Qwen3-VL 2B; the recommended Ollama build uses a quantized Qwen2.5-VL 3B model. This distinction is intentional because the authors warn that third-party GGUF conversions may reduce OCR accuracy.
 
-In Open WebUI, start a new chat, select `corp-vision`, attach an image, disable Thinking for transcription, and use a constrained prompt such as:
+This is a task-specific OCR model, not a general chat or VQA model. Start a new Open WebUI chat, select `corp-ocr`, attach one document image, set temperature to `0.1`, and use the model's required prompt:
 
 ```text
-Transcribe every visible character exactly as written. Preserve line breaks and table structure.
-Do not summarize, translate, correct spelling, or invent unreadable text.
-Write [ILLEGIBLE] wherever the image cannot be read confidently.
+Extract all text from the image.
+
+Instructions:
+- Only return the clean Markdown.
+- Do not include any explanation or extra text.
+- You must include all information on the page.
+
+Formatting Rules:
+- Tables: Render tables using <table>...</table> in clean HTML format.
+- Equations: Render equations using LaTeX syntax with inline ($...$) and block ($$...$$).
+- Page Numbers: Wrap page numbers in <page_number>...</page_number>.
+- Checkboxes: Use ☐ for unchecked and ☑ for checked boxes.
 ```
 
-Thinking can consume the output-token budget before the final transcription and produce a truncated answer. For API OCR requests, send `"extra_body": {"think": false}` and allow at least 256 output tokens. Enable Thinking again for complex reasoning tasks.
-
-Image inputs consume context tokens. The stack defaults Ollama to an 8192-token context so typical OCR images fit; if Ollama reports `request (...) exceeds the available context size`, increase `OLLAMA_CONTEXT_LENGTH` in the private `.env` and recreate the Ollama container. Larger contexts consume more RAM and KV-cache memory.
-
-For complex text-only work, select `corp-vision` and omit the image. Keep `corp-general` for quicker responses and lower memory use.
-
-The 12B model does not fit entirely in a 4 GB RTX 3050 Laptop GPU. Ollama will offload part of it to system RAM/CPU, so first-token latency can be high and concurrent requests are not recommended on that hardware. If the 12B model is too slow, select a smaller official Gemma 4 vision tag supported by the installed Ollama version and update both `OLLAMA_VISION_MODEL` and the physical model in `litellm/config.yaml` together.
+Use `corp-general` for complex reasoning or ordinary chat. Typhoon OCR can still hallucinate, so compare important output with the source document. Image inputs consume context tokens; if Ollama reports `exceeds the available context size`, increase `OLLAMA_CONTEXT_LENGTH` in the private `.env` and recreate the Ollama container. Larger contexts consume more RAM and KV-cache memory.
 
 ## Test the API key
 

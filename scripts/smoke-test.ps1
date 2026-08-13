@@ -16,8 +16,8 @@ try {
     if (@($models.data.id) -notcontains 'corp-general') {
         throw "LiteLLM does not expose model alias 'corp-general'."
     }
-    if (@($models.data.id) -notcontains 'corp-vision') {
-        throw "LiteLLM does not expose vision model alias 'corp-vision'."
+    if (@($models.data.id) -notcontains 'corp-ocr') {
+        throw "LiteLLM does not expose OCR model alias 'corp-ocr'."
     }
 
     $body = @{
