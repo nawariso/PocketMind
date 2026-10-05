@@ -81,11 +81,13 @@ services:
     ports:
       - "127.0.0.1:9090:9090"
     volumes:
-      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus/prometheus.native.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus_data:/prometheus
     configs:
       - source: litellm_token
         target: /etc/prometheus/litellm_token
+    extra_hosts:
+      - "host.docker.internal=host-gateway"
     command:
       - "--config.file=/etc/prometheus/prometheus.yml"
       - "--storage.tsdb.retention.time=7d"

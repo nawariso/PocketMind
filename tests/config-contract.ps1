@@ -28,10 +28,12 @@ $requiredFiles = @(
     'litellm/config.yaml',
     'prometheus/prometheus.yml',
     'prometheus/prometheus.nvidia.yml',
+    'prometheus/prometheus.native.yml',
     'grafana/provisioning/datasources/prometheus.yml',
     'grafana/provisioning/dashboards/dashboard.yml',
     'grafana/dashboards/litellm-overview.json',
     'grafana/dashboards/gpu-engine-overview.json',
+    'grafana/dashboards/host-overview.json',
     'scripts/common.ps1',
     'scripts/check-prerequisites.ps1',
     'scripts/setup.ps1',
@@ -178,6 +180,37 @@ function Test-MonitoringContract {
         Assert-True -Condition (([regex]::Matches($nvidiaPrometheus, 'nvidia-exporter:9835')).Count -eq 1) `
             -Message 'NVIDIA Prometheus configuration must contain exactly one exporter target'
     }
+
+    $nativePrometheus = Get-Content -Raw -LiteralPath (Join-Path $repoRoot 'prometheus/prometheus.native.yml')
+    Assert-True -Condition ($nativePrometheus -match 'job_name: litellm') `
+        -Message 'Native Prometheus configuration must scrape LiteLLM'
+    Assert-True -Condition ($nativePrometheus -match '(?ms)- job_name: host\s+static_configs:.*?- host\.docker\.internal:9100') `
+        -Message 'Native Prometheus configuration must scrape host node_exporter on host.docker.internal:9100'
+    Assert-True -Condition ($nativePrometheus -notmatch 'nvidia') `
+        -Message 'Native Prometheus configuration must not scrape NVIDIA metrics'
+
+    $hostDashboardPath = Join-Path $repoRoot 'grafana/dashboards/host-overview.json'
+    $hostDashboard = Get-Content -Raw -LiteralPath $hostDashboardPath | ConvertFrom-Json
+    Assert-True -Condition ($hostDashboard.uid -eq 'pocketmind-host') -Message 'Host dashboard UID is incorrect'
+    Assert-True -Condition ($hostDashboard.title -eq 'Local LLM - Host (macOS & CPU)') -Message 'Host dashboard title is incorrect'
+    $hostExpressions = @($hostDashboard.panels | ForEach-Object {
+        $targetsProperty = $_.PSObject.Properties['targets']
+        if ($null -ne $targetsProperty) { @($targetsProperty.Value) }
+    } | Where-Object { $null -ne $_ } | ForEach-Object { $_.expr })
+    foreach ($metric in @('node_cpu_seconds_total', 'node_memory_total_bytes', 'node_memory_swapped_in_bytes_total', 'node_load1', 'litellm_input_tokens_metric_total')) {
+        Assert-True -Condition (($hostExpressions -join "`n").Contains($metric)) `
+            -Message "Host dashboard does not query $metric"
+    }
+
+    $gpuDashboardForParity = Get-Content -Raw -LiteralPath (Join-Path $repoRoot 'grafana/dashboards/gpu-engine-overview.json') | ConvertFrom-Json
+    # The host dashboard omits the N/A text panels but must keep the same engine charts and queries.
+    $engineOf = { param($dashboard) (@($dashboard.panels | Where-Object { $_.id -ge 8 -and $_.type -ne 'text' -and $_.type -ne 'row' } | ForEach-Object {
+        [pscustomobject]@{ title = $_.title; unit = $_.fieldConfig.defaults.unit; exprs = @($_.targets | ForEach-Object { $_.expr }) } }) | ConvertTo-Json -Depth 10 -Compress) }
+    Assert-True -Condition ((& $engineOf $gpuDashboardForParity) -eq (& $engineOf $hostDashboard)) `
+        -Message 'Host dashboard engine charts must use the same titles, units, and queries as the GPU dashboard'
+    Assert-True -Condition ((Get-Content -Raw -LiteralPath $hostDashboardPath) -notmatch 'continuous-YlOrRd') `
+        -Message 'Host dashboard must not use the color mode continuous-YlOrRd, which Grafana 12 cannot render with data'
+    Assert-True -Condition ($hostDashboard.refresh -eq '5s') -Message 'Host dashboard refresh must match the GPU dashboard (5s)'
 
     $dashboardPath = Join-Path $repoRoot 'grafana/dashboards/gpu-engine-overview.json'
     if (-not (Test-Path -LiteralPath $dashboardPath -PathType Leaf)) { return }
