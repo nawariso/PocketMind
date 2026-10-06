@@ -297,6 +297,16 @@ Formatting Rules:
 
 Use `corp-general` for complex reasoning or ordinary chat. Typhoon OCR can still hallucinate, so compare important output with the source document. Image inputs consume context tokens; if Ollama reports `exceeds the available context size`, increase `OLLAMA_CONTEXT_LENGTH` in the private `.env` and recreate the Ollama container. Larger contexts consume more RAM and KV-cache memory.
 
+## Self-service API keys for Open WebUI users
+
+Pilot users can create their own scoped LiteLLM key without leaving Open WebUI. An administrator installs the "API Key Manager" model once:
+
+```text
+pwsh ./scripts/install-key-manager.ps1 -AdminEmail <admin email>
+```
+
+The script prompts for the admin password (or reads `OPENWEBUI_ADMIN_PASSWORD`) and registers the model for every signed-in user; add `-GroupId <id>` to limit it to groups. Add `-PublicModels corp-general,corp-ocr` to make those models visible to every signed-in user (a model that already has an Open WebUI entry is skipped, so check its access in Admin → Settings → Models). Users select "API Key Manager" and type `models`, `new <model>`, `list`, `rotate <model>`, `revoke <model>`, or `help`. Each key works for one model, expires, is limited in rate and concurrency by the function's Valves, is shown only once, and is attributed to the LiteLLM team the user belongs to (add members by email in the LiteLLM UI). Teams are managed only in LiteLLM and are mirrored to Open WebUI groups automatically, or immediately when an administrator types `sync`. Users call LiteLLM directly, so a shared pilot must publish only `/v1/*` through a TLS proxy. See [ADR 0004](docs/decisions/0004-self-service-virtual-keys.md) and [security guidance](docs/security.md).
+
 ## Test the API key
 
 Postman configuration:

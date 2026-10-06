@@ -20,7 +20,8 @@ $requiredDocs = @(
     'docs/models/benchmark-log.md',
     'docs/decisions/0001-stable-model-aliases.md',
     'docs/decisions/0002-typhoon-for-ocr.md',
-    'docs/decisions/0003-database-backed-model-lab.md'
+    'docs/decisions/0003-database-backed-model-lab.md',
+    'docs/decisions/0004-self-service-virtual-keys.md'
 )
 foreach ($relativePath in $requiredDocs) {
     $path = Join-Path $repoRoot $relativePath

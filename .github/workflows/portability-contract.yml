@@ -19,6 +19,9 @@ jobs:
       - name: Script portability contract
         shell: pwsh
         run: ./tests/script-portability.ps1
+      - name: API Key Manager contract
+        shell: pwsh
+        run: ./tests/key-manager-contract.ps1
 
   compose-contract:
     runs-on: ubuntu-latest

@@ -44,6 +44,20 @@ Quick Tunnel is temporary test access, not production ingress:
 - Keep experimental Model Lab aliases private until reviewed.
 - Use time-limited/scoped API credentials.
 
+## Self-service API keys
+
+Pilot users create their own LiteLLM key from the Open WebUI model "API Key Manager" (see [ADR 0004](decisions/0004-self-service-virtual-keys.md)):
+
+- keys are scoped to an explicit model list, expire, and have rate and concurrency limits set by the administrator;
+- the full key is shown once in the user's chat history, so users should delete that chat after copying it;
+- after every Open WebUI upgrade, create a key in a test chat and confirm the key does not appear in the chat title, tags, or follow-ups, because those tasks receive the reply text;
+- expose only `/v1/*` of LiteLLM through a TLS proxy; never publish `/ui`, `/key`, or `/model`;
+- never use a weak master key; the Pipe reads it from the Open WebUI container environment;
+- keys are limited to one model each and attributed to the LiteLLM team the user belongs to (matched by email); manage teams only in LiteLLM, they are mirrored to Open WebUI groups by `sync` and never the other way;
+- if you set the default user role to `user` so people are not left `pending`, keep sign-up closed or limited to a trusted identity provider, because every approved user can chat and create keys;
+- deleting a LiteLLM team also deletes every key attributed to it, so move or recreate keys before removing a team (`unassigned` included);
+- revoke a user's access by deleting their key in LiteLLM (Virtual Keys) or with `revoke` by that user.
+
 ## Logs and screenshots
 
 Treat environment dumps, container inspection, request payloads, browser screenshots, and Postman exports as potentially secret-bearing. Redact bearer tokens, passwords, cookies, database URLs, and tunnel credentials before sharing.

@@ -25,6 +25,7 @@ Architecture decision records explain choices that should survive implementation
 - [0001 — Stable model aliases](decisions/0001-stable-model-aliases.md)
 - [0002 — Typhoon for OCR](decisions/0002-typhoon-for-ocr.md)
 - [0003 — Database-backed Model Lab](decisions/0003-database-backed-model-lab.md)
+- [0004 — Self-service virtual keys through Open WebUI](decisions/0004-self-service-virtual-keys.md)
 
 ## Historical implementation plans
 
