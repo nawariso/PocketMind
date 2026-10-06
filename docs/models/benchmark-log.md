@@ -51,6 +51,15 @@ Measurements below are historical observations from the reference Windows laptop
 - Limitation: does not support tools. Open WebUI must keep `builtin_tools=false`.
 - Decision: promoted to `corp-ocr`.
 
+## Apple M2 reference (MacBook Air Mac14,2, 16 GB, native Ollama)
+
+Measured through the PocketMind stack on one machine with other applications and Docker Desktop (about 7.6 GB for the VM) running, so host memory was under pressure (about 12.8–14 GB used and several GB of swap while measuring). These are single observations, context 8192, not guarantees.
+
+- `qwen3:4b-instruct-2507-q4_K_M` (`corp-general`): `ollama ps` showed 100% GPU (Metal), process size about 3.8 GB at context 8192. Short English request through a personal API key: 1.1 s, 17 total tokens (prompt plus output). Thai two-sentence request: 3.5 s, 130 total tokens with output limited to 120.
+- `qwen3:1.7b` (`lab-qwen3-1.7b`, 2.0B reported): Model Lab text test, Thai prompt, 128 output tokens. Cold run 4.10 s (31.2 tokens/s wall rate); warm run 2.38 s (53.7 tokens/s). Wall rate includes request overhead and is not comparable with provider eval tokens/s.
+- `scb10x/typhoon-ocr1.5-3b` (`corp-ocr`): a generated Thai and English receipt image (receipt number, two dates, customer name, two line items, total) was returned with all 9 expected fragments, 16.9 s, temperature 0.1, using the documented extraction prompt. The image was synthetic, so this says nothing about scans or photographs.
+- Streaming through a personal key delivered 16 chunks for a short count.
+
 ## Benchmark hygiene
 
 Future entries must include exact model tag, context, prompt/output budget, cold vs warm status, placement, and ground-truth result. Do not compare Model Lab wall-rate directly with provider eval tokens/s without labeling the metric.

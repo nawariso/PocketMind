@@ -17,6 +17,8 @@ PocketMind is a local, single-host stack. Its default network policy is localhos
 
 The private `.env` is ignored by Git. `.env.example` contains placeholders only. Back up real values in an approved secret store; do not print them during diagnostics.
 
+The prerequisite check rejects only `CHANGE_ME` placeholders. It accepts a weak value such as a common word, so choose long random secrets yourself, especially `LITELLM_MASTER_KEY` (and Grafana's password) before anyone else can reach the stack. The master key is also read by Open WebUI's API Key Manager, so a weak key exposes key creation too. Rotating it touches several stores; follow the operations runbook.
+
 ## Model access
 
 - `corp-general` and `corp-ocr` are stable production aliases.
@@ -35,6 +37,14 @@ Quick Tunnel is temporary test access, not production ingress:
 - do not expose LiteLLM API unless a separate test specifically requires it;
 - for API testing, use a short-lived scoped Virtual Key, never the master key;
 - use restart policy `no`, record the current temporary URL, then remove the tunnel and revoke test keys.
+
+## Accounts and sign-up
+
+- Open WebUI sign-up is closed; administrators add accounts. Keep it closed unless account creation is otherwise controlled.
+- Password sign-up checks only the email format. It cannot restrict email domains and does not verify that the person owns the address. Team attribution in the API Key Manager trusts the account email, so unverified sign-up would let someone claim another person's team by using their address.
+- Domain restriction exists for SSO (`OAUTH_ALLOWED_DOMAINS`) and, with an identity provider, also proves mailbox ownership. Use SSO before opening access to many users.
+- The default user role (`pending` unless changed) decides what a newly created or SSO account may do. Changing it to `user` removes the approval step, so combine it only with controlled account creation.
+- Open WebUI persists these settings in its database after first start; change them in Admin Panel → Settings, not in `.env`.
 
 ## Least privilege
 

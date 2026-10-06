@@ -8,13 +8,15 @@ Back up unique state; re-pull rebuildable artifacts. Test restoration before rel
 |---|---|---|
 | Private `.env` | Critical | Approved encrypted secret store; never Git |
 | PostgreSQL (`postgres_data`) | Critical | Logical `pg_dump`/`pg_restore` |
-| Open WebUI (`openwebui_data`) | Critical when users/chats/grants matter | Quiesced archive of `/app/backend/data` |
+| Open WebUI (`openwebui_data`) | Critical when users/chats/grants matter | Quiesced archive of `/app/backend/data`; includes persisted settings, groups, and the API Key Manager function with its Valves |
 | Ollama weights (`ollama_data`) | Optional | Usually re-pull exact tags |
 | Grafana local state | Optional | Provisioned assets are in Git; back up if local edits exist |
 | Prometheus history | Optional | Rebuildable; retain only if history is required |
 | Source/config | Critical | Git remote plus verified commit |
 
 Create backups outside the repository so they cannot be committed accidentally.
+
+LiteLLM teams and issued virtual keys live in PostgreSQL. A key is shown to its user only once and cannot be recovered from a backup in readable form, so users whose keys were lost or deleted run `new <model>` again. If you restore Open WebUI without PostgreSQL (or the reverse), team groups and key ownership can disagree; run `sync` as an administrator afterwards. Re-run `scripts/install-key-manager.ps1` if the function is missing after a restore.
 
 ## PostgreSQL backup
 
