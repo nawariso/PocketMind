@@ -69,7 +69,7 @@ Add `-CheckOnly` (`--CheckOnly` with the shell wrapper) to see what is missing w
 
 **Who may register.** The administrator created from `.env` closes sign-up, so by default only accounts an administrator adds exist, and they get the `user` role at once (`DEFAULT_USER_ROLE=user`). `-EnableSignup` turns self-registration on; with the `user` role that means anyone who can reach Open WebUI can chat and create API keys, there is no email-domain limit, email addresses are not verified, and team attribution by email can be claimed by anyone. Use it only on a network you trust, or put SSO in front instead.
 
-It does not install Docker, PowerShell, the NVIDIA toolkit, or Ollama; a failed check prints what to install for that operating system. The full run was exercised on macOS only; see [docs/server-deployment-checklist.md](docs/server-deployment-checklist.md) for what was and was not verified.
+By default it installs nothing: a failed check prints what to install for that operating system. `--InstallPrerequisites` (`-InstallPrerequisites` in PowerShell) installs PowerShell 7 (macOS through Homebrew; Ubuntu, Debian, and RHEL-family Linux through Microsoft's package repository) and Ollama on macOS (Homebrew, kept running by a launchd agent), after showing the commands and asking; it never upgrades what is already installed and never installs Docker or the NVIDIA toolkit. The full run was exercised on macOS only, and the Linux package installs were not run for real; see [docs/server-deployment-checklist.md](docs/server-deployment-checklist.md) for what was and was not verified.
 
 The manual steps below (First-time repository setup and Quick start) do the same thing one script at a time.
 

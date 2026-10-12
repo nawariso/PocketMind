@@ -262,9 +262,10 @@ function Invoke-PocHttpStatus {
         return [int](Invoke-WebRequest @requestParameters).StatusCode
     }
     catch {
-        $response = $_.Exception.Response
-        if ($null -eq $response) { throw }
-        return [int]$response.StatusCode
+        # A refused connection has no HTTP response (and, under strict mode, no Response property at all).
+        $responseProperty = $_.Exception.PSObject.Properties['Response']
+        if ($null -eq $responseProperty -or $null -eq $responseProperty.Value) { throw }
+        return [int]$responseProperty.Value.StatusCode
     }
 }
 

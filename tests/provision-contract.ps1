@@ -115,6 +115,42 @@ foreach ($term in @('[switch] $EnableSignup', 'Test-FreshOpenWebUiExposure', '-K
     Assert-True -Condition $provision.Contains($term) -Message "provision.ps1 is missing: $term"
 }
 
+# --- native Ollama on macOS: the launchd file, the plan, and the refusal to guess
+$plist = New-OllamaLaunchAgentPlist -Label 'com.example.ollama' -OllamaPath '/opt/homebrew/bin/ollama' -Environment ([ordered]@{ OLLAMA_CONTEXT_LENGTH = '8192'; OLLAMA_KEEP_ALIVE = '10m' }) -LogPath '/tmp/ollama & test.log'
+$plistXml = $null
+try { $plistXml = [xml]$plist } catch { }
+Assert-True -Condition ($null -ne $plistXml) -Message 'The generated launchd file must be well-formed XML (including escaping of special characters)'
+Assert-True -Condition ($plist.Contains('<string>/opt/homebrew/bin/ollama</string>') -and $plist.Contains('<string>serve</string>')) -Message 'The launchd file must run "ollama serve" by absolute path'
+Assert-True -Condition ($plist -match '<key>OLLAMA_CONTEXT_LENGTH</key>\s*<string>8192</string>' -and $plist -match '<key>OLLAMA_KEEP_ALIVE</key>\s*<string>10m</string>') -Message 'The launchd file must carry the context length and keep-alive'
+Assert-True -Condition ($plist -notmatch 'OLLAMA_HOST') -Message 'The launchd file must not set OLLAMA_HOST: Ollama must keep its loopback default'
+Assert-True -Condition ($plist -match '<key>RunAtLoad</key>\s*<true/>' -and $plist -match '<key>KeepAlive</key>\s*<true/>') -Message 'The launchd file must start Ollama at login and keep it running'
+Assert-True -Condition ($plist.Contains('ollama &amp; test.log')) -Message 'Special characters in the launchd file must be escaped'
+if ($null -ne (Get-Command plutil -ErrorAction SilentlyContinue)) {
+    $plistFile = Join-Path ([System.IO.Path]::GetTempPath()) ("pm-" + [guid]::NewGuid().ToString('N') + '.plist')
+    try { Set-Content -LiteralPath $plistFile -Value $plist -Encoding UTF8; & plutil -lint $plistFile | Out-Null; Assert-True -Condition ($LASTEXITCODE -eq 0) -Message 'plutil must accept the generated launchd file' }
+    finally { Remove-Item -LiteralPath $plistFile -ErrorAction SilentlyContinue }
+}
+$freshPlan = Get-OllamaInstallPlan -Installed $false -OllamaPath '/opt/homebrew/bin/ollama' -Label 'x' -ContextLength '8192' -KeepAlive '10m'
+$presentPlan = Get-OllamaInstallPlan -Installed $true -OllamaPath '/opt/homebrew/bin/ollama' -Label 'x' -ContextLength '8192' -KeepAlive '10m'
+Assert-True -Condition (($freshPlan -join ' ').Contains('HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_INSTALL_UPGRADE=1')) -Message 'Installing Ollama must forbid Homebrew from updating or upgrading anything'
+Assert-True -Condition (-not (($presentPlan -join ' ') -match 'brew install')) -Message 'An Ollama that is already installed must not be installed again'
+$closedPort = $null
+$probe = New-Object System.Net.Sockets.TcpListener ([System.Net.IPAddress]::Loopback), 0
+$probe.Start(); $closedPort = ([System.Net.IPEndPoint]$probe.LocalEndpoint).Port; $probe.Stop()
+Assert-True -Condition ((Test-HttpAnswers -Uri "http://127.0.0.1:$closedPort/api/tags" -TimeoutSeconds 2) -eq $false) -Message 'A refused connection must be reported as "does not answer", not as an error'
+$caught = $false
+try { Invoke-PocHttpStatus -Uri "http://127.0.0.1:$closedPort/" -TimeoutSeconds 2 | Out-Null } catch { $caught = $_.Exception.Message -notmatch "property 'Response'" }
+Assert-True -Condition $caught -Message 'Invoke-PocHttpStatus must fail with the real connection error, not a missing-property error'
+foreach ($term in @('[switch] $InstallPrerequisites', '[switch] $Yes', 'HOMEBREW_NO_INSTALL_UPGRADE', 'Docker is never installed', 'launchctl bootout')) {
+    Assert-True -Condition $provision.Contains($term) -Message "provision.ps1 is missing: $term"
+}
+
+# --- the PowerShell installer in provision.sh, with stand-in package managers (never installs anything)
+if ($null -ne (Get-Command sh -ErrorAction SilentlyContinue) -and [System.IO.Path]::DirectorySeparatorChar -eq '/') {
+    $shellTest = @(& sh (Join-Path $repoRoot 'tests/provision-sh-test.sh') 2>&1)
+    Assert-True -Condition ($LASTEXITCODE -eq 0 -and ($shellTest | Select-Object -Last 1) -match 'all \d+ checks passed') -Message "tests/provision-sh-test.sh failed: $($shellTest -join ' | ')"
+}
+
 # --- the order of the steps, and the guards, are what prevents a wrong sequence
 $order = @('check-prerequisites.ps1', 'setup.ps1', 'verify-stack.ps1', 'configure-open-webui.ps1', 'install-key-manager.ps1') | ForEach-Object { $provision.IndexOf("'$_'") }
 Assert-True -Condition (@($order | Where-Object { $_ -lt 0 }).Count -eq 0) -Message 'provision.ps1 must run every step script'

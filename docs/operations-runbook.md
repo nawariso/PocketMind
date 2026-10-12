@@ -75,7 +75,7 @@ The native profile uses an Ollama process on the host. `.env` values such as `OL
 OLLAMA_CONTEXT_LENGTH=8192 OLLAMA_KEEP_ALIVE=10m ollama serve
 ```
 
-Set the same variables in whichever launcher you use (desktop app, service manager, or script), then confirm `ollama list` shows `corp-general` and `corp-ocr` and that `ollama ps` shows context 8192. A process started by hand stops with its session, and LiteLLM then returns `Cannot connect to host host.docker.internal:11434`. Keep the default `127.0.0.1` bind; the profile never broadens it.
+`provision.sh --InstallPrerequisites` can set this up for you: it installs Ollama with Homebrew if missing and loads a launchd agent, `~/Library/LaunchAgents/com.pocketmind.ollama.plist`, that runs `ollama serve` at login and keeps it running with these variables (log: `~/Library/Logs/PocketMind/ollama.log`). It leaves an Ollama that already answers on port 11434 alone. To remove the agent: `launchctl bootout gui/$(id -u)/com.pocketmind.ollama` and delete the plist. Otherwise set the same variables in whichever launcher you use (desktop app, service manager, or script), then confirm `ollama list` shows `corp-general` and `corp-ocr` and that `ollama ps` shows context 8192. A process started by hand stops with its session, and LiteLLM then returns `Cannot connect to host host.docker.internal:11434`. Keep the default `127.0.0.1` bind; the profile never broadens it.
 
 ## Host monitoring on macOS
 

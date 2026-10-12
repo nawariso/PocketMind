@@ -50,6 +50,10 @@ The optional nginx proxy (ADR 0005) is the only component meant to listen beyond
 - Open WebUI holds the LiteLLM master key and would forward arbitrary paths upstream with it if its OpenAI passthrough were on, so `ENABLE_OPENAI_API_PASSTHROUGH` is pinned to `false` in the compose files and asserted by `tests/proxy-contract.ps1`. Through the Open WebUI port a signed-in user then gets 403 for `/openai/key/generate`, `/openai/key/list`, `/openai/model/new`, `/openai/team/list`, and `/openai/openapi.json` (tested with a throwaway non-admin account). Open WebUI's own OpenAI-compatible chat routes (`/openai/chat/completions`, `/api/chat/completions`) stay available to signed-in users with their session token, within the models they may see; those calls reach LiteLLM with Open WebUI's key, so a personal key's rate and concurrency limits do not apply to them;
 - keep sign-up closed and use strong secrets in `.env`, because the master key is the only protection of everything the proxy does not expose.
 
+## Installing prerequisites
+
+`--InstallPrerequisites` adds third-party software to the host and trusts its source: Microsoft's package repository (PowerShell on Linux) or Homebrew (PowerShell and Ollama on macOS). It runs only on request, shows the commands first, never upgrades what is installed, and never installs Docker. On a managed server use your own change process instead if installing from those sources is not allowed.
+
 ## Accounts and sign-up
 
 - Open WebUI sign-up is closed; administrators add accounts. Keep it closed unless account creation is otherwise controlled. Check it with `curl -s http://localhost:3000/api/config` (`enable_signup` must be false) before sharing the server; the setting lives in Open WebUI's database and an administrator can turn it back on.

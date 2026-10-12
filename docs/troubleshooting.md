@@ -130,6 +130,14 @@ Open WebUI limits sign-ins to 15 per 3 minutes per email. Wait three minutes wit
 
 `.env` exists but names no administrator, the proxy listens beyond this host, and no Open WebUI data exists yet, so the first visitor would become administrator. Set `WEBUI_ADMIN_EMAIL` and `WEBUI_ADMIN_PASSWORD` in `.env`, or set `PROXY_BIND_ADDRESS=127.0.0.1` until the account exists.
 
+## `--InstallPrerequisites` fails
+
+- **`403 Forbidden` or a certificate error from the operating system's package mirror** (Ubuntu, Debian, Rocky): a gateway on the network blocks plain-HTTP package downloads or intercepts TLS. This happened on the test network, so the Linux installs could not be run for real there. Allow the mirror, use a mirror you can reach, or install PowerShell yourself (link printed by the script).
+- **"does not publish packages for <distribution> <version>"**: Microsoft's repository has no package for it; the script refuses rather than guess a URL. Install PowerShell manually.
+- **"not covered by the automatic install"**: a Linux other than Ubuntu, Debian, or the RHEL family.
+- **"Homebrew was not found"** (macOS): install Homebrew first, or install Ollama and PowerShell yourself.
+- **Ollama does not answer after the agent loads**: read `~/Library/Logs/PocketMind/ollama.log`; check that nothing else uses port 11434 (`lsof -nP -iTCP:11434 -sTCP:LISTEN`); over SSH on a Mac with nobody logged in at the screen, the agent loads in the `user/<uid>` domain instead of `gui/<uid>`.
+
 ## Image or model downloads fail on the server
 
 A pull that ends in `unexpected EOF`, or in a "denied" page from `pkg-containers.githubusercontent.com`, means a gateway or proxy on the network is blocking or cutting the download. The install needs `registry-1.docker.io`, `ghcr.io` with `pkg-containers.githubusercontent.com`, `docker.litellm.ai`, and `registry.ollama.ai`. Ask for them to be allowed, retry (layers already downloaded are kept), or pre-load images with `docker save` and `docker load`.

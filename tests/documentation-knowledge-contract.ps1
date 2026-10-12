@@ -66,7 +66,8 @@ if (Test-Path -LiteralPath (Join-Path $repoRoot 'docs/operations-runbook.md')) {
         'install-key-manager.ps1',
         'usage-report.ps1',
         'PROXY_ENABLED=true',
-        'nginx/local'
+        'nginx/local',
+        'com.pocketmind.ollama'
     )) {
         Assert-True -Condition ($runbook.Contains($term)) -Message "Operations runbook is missing: $term"
     }
@@ -98,7 +99,7 @@ if (Test-Path -LiteralPath (Join-Path $repoRoot 'docs/architecture.md')) {
 
 if (Test-Path -LiteralPath (Join-Path $repoRoot 'README.md')) {
     $readme = Get-Content -Raw -LiteralPath (Join-Path $repoRoot 'README.md')
-    foreach ($term in @('WEBUI_ADMIN_EMAIL', 'server-deployment-checklist.md', 'usage-report.ps1', 'install-key-manager.ps1', 'Task Model', 'OLLAMA_CONTEXT_LENGTH=8192', 'PROXY_ENABLED=true', 'nginx/local', 'Shared pilot access with the nginx proxy', 'http://localhost:8481/v1', 'docker-compose.proxy.yml', 'Provision a server with one command', 'docs/provisioning-guide.md', 'provision.ps1', 'configure-open-webui.ps1', '-EnableSignup', 'Who may register')) {
+    foreach ($term in @('WEBUI_ADMIN_EMAIL', 'server-deployment-checklist.md', 'usage-report.ps1', 'install-key-manager.ps1', 'Task Model', 'OLLAMA_CONTEXT_LENGTH=8192', 'PROXY_ENABLED=true', 'nginx/local', 'Shared pilot access with the nginx proxy', 'http://localhost:8481/v1', 'docker-compose.proxy.yml', 'Provision a server with one command', 'docs/provisioning-guide.md', 'InstallPrerequisites', 'provision.ps1', 'configure-open-webui.ps1', '-EnableSignup', 'Who may register')) {
         Assert-True -Condition ($readme.Contains($term)) -Message "README is missing: $term"
     }
 }

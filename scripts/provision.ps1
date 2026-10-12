@@ -10,6 +10,11 @@ param(
     # Open Open WebUI sign-up to everyone who can reach it. Off by default: with the new-account role `user` it means
     # anyone on the network can chat and create API keys, with no email-domain limit and no email verification.
     [switch] $EnableSignup,
+    # Install what is missing and safe to install: Ollama on macOS (Homebrew, started by a LaunchAgent with the
+    # context length the stack needs). With -CheckOnly it only prints what it would do. Docker is never installed.
+    [switch] $InstallPrerequisites,
+    # Do not ask before installing.
+    [switch] $Yes,
     # Do not download images and models (they must already be present).
     [switch] $NoPull,
     [switch] $LibraryOnly
@@ -152,6 +157,131 @@ function Test-FreshOpenWebUiExposure {
     return $ProxyEnabled -and $BindAddress -ne '127.0.0.1'
 }
 
+function ConvertTo-XmlText {
+    param([string] $Text)
+    return [System.Security.SecurityElement]::Escape($Text)
+}
+
+function New-OllamaLaunchAgentPlist {
+    # A launchd agent that runs `ollama serve` at login and keeps it running, with the environment the stack needs.
+    # OLLAMA_HOST is not set here, so Ollama keeps its loopback default; pass it in -Environment only for tests.
+    param(
+        [Parameter(Mandatory)] [string] $Label,
+        [Parameter(Mandatory)] [string] $OllamaPath,
+        [Parameter(Mandatory)] [System.Collections.IDictionary] $Environment,
+        [Parameter(Mandatory)] [string] $LogPath
+    )
+    $variables = ($Environment.Keys | Sort-Object | ForEach-Object {
+        "        <key>$(ConvertTo-XmlText $_)</key>`n        <string>$(ConvertTo-XmlText ([string]$Environment[$_]))</string>"
+    }) -join "`n"
+    return @"
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>$(ConvertTo-XmlText $Label)</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>$(ConvertTo-XmlText $OllamaPath)</string>
+        <string>serve</string>
+    </array>
+    <key>EnvironmentVariables</key>
+    <dict>
+$variables
+    </dict>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>$(ConvertTo-XmlText $LogPath)</string>
+    <key>StandardErrorPath</key>
+    <string>$(ConvertTo-XmlText $LogPath)</string>
+</dict>
+</plist>
+"@
+}
+
+function Get-OllamaSettings {
+    # The values the stack expects, from .env, else .env.example, else the documented defaults.
+    $values = @{}
+    foreach ($name in @('.env', '.env.example')) {
+        $path = Join-Path $script:PocRepoRoot $name
+        if (Test-Path -LiteralPath $path -PathType Leaf) { $values = Get-PocEnv -Path $path; break }
+    }
+    $context = [string]$values['OLLAMA_CONTEXT_LENGTH']; if ([string]::IsNullOrWhiteSpace($context)) { $context = '8192' }
+    $keepAlive = [string]$values['OLLAMA_KEEP_ALIVE']; if ([string]::IsNullOrWhiteSpace($keepAlive)) { $keepAlive = '10m' }
+    return [pscustomobject]@{ ContextLength = $context; KeepAlive = $keepAlive }
+}
+
+function Test-HttpAnswers {
+    # True only when the address answers 200; a refused or timed-out connection is simply false.
+    param([Parameter(Mandatory)] [string] $Uri, [int] $TimeoutSeconds = 5)
+    try { return (Invoke-PocHttpStatus -Uri $Uri -TimeoutSeconds $TimeoutSeconds) -eq 200 } catch { return $false }
+}
+
+function Confirm-ProvisionAction {
+    param([Parameter(Mandatory)] [string[]] $Plan, [switch] $AssumeYes)
+    Write-Host 'About to do:' -ForegroundColor Cyan
+    $Plan | ForEach-Object { Write-Host "  - $_" }
+    if ($AssumeYes) { return $true }
+    if (-not [Environment]::UserInteractive -or [Console]::IsInputRedirected) {
+        throw 'Installing needs confirmation but there is no terminal; run again with -Yes to confirm.'
+    }
+    return (Read-Host -Prompt 'Proceed? (y/N)') -match '^(y|yes)$'
+}
+
+function Get-OllamaInstallPlan {
+    # What -InstallPrerequisites would do for native Ollama. Homebrew is told never to update itself or to upgrade
+    # something already installed: an upgrade would interrupt a running Ollama and change a version nobody tested.
+    param(
+        [Parameter(Mandatory)] [bool] $Installed,
+        [Parameter(Mandatory)] [string] $OllamaPath,
+        [Parameter(Mandatory)] [string] $Label,
+        [Parameter(Mandatory)] [string] $ContextLength,
+        [Parameter(Mandatory)] [string] $KeepAlive
+    )
+    $plan = New-Object 'System.Collections.Generic.List[string]'
+    if (-not $Installed) { $plan.Add('brew install ollama   (HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_INSTALL_UPGRADE=1)') }
+    $plan.Add("write ~/Library/LaunchAgents/$Label.plist: run '$OllamaPath serve' at login and keep it running, with OLLAMA_CONTEXT_LENGTH=$ContextLength and OLLAMA_KEEP_ALIVE=$KeepAlive (Ollama stays on 127.0.0.1)")
+    $plan.Add("launchctl bootstrap the agent, then wait for http://localhost:11434")
+    return @($plan)
+}
+
+function Install-OllamaLaunchAgent {
+    # Loads (or reloads) the agent. Safe to run again: an agent with the same label is unloaded first.
+    param(
+        [Parameter(Mandatory)] [string] $Label,
+        [Parameter(Mandatory)] [string] $OllamaPath,
+        [Parameter(Mandatory)] [System.Collections.IDictionary] $Environment,
+        [string] $PlistDirectory = (Join-Path $HOME 'Library/LaunchAgents'),
+        [string] $LogDirectory = (Join-Path $HOME 'Library/Logs/PocketMind'),
+        [int] $Port = 11434
+    )
+    New-Item -ItemType Directory -Path $PlistDirectory -Force | Out-Null
+    New-Item -ItemType Directory -Path $LogDirectory -Force | Out-Null
+    $plistPath = Join-Path $PlistDirectory "$Label.plist"
+    Set-Content -LiteralPath $plistPath -Value (New-OllamaLaunchAgentPlist -Label $Label -OllamaPath $OllamaPath -Environment $Environment -LogPath (Join-Path $LogDirectory 'ollama.log')) -Encoding UTF8
+    & plutil -lint $plistPath | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "The generated launchd file is not valid: $plistPath" }
+
+    $uid = (& id -u).Trim()
+    # gui/<uid> exists only in a logged-in desktop session; over SSH on a headless Mac use user/<uid>.
+    $domain = "gui/$uid"
+    & launchctl print $domain 2>$null | Out-Null
+    if ($LASTEXITCODE -ne 0) { $domain = "user/$uid" }
+    & launchctl bootout "$domain/$Label" 2>$null | Out-Null
+    $global:LASTEXITCODE = 0
+    $output = & launchctl bootstrap $domain $plistPath 2>&1
+    if ($LASTEXITCODE -ne 0) { throw "launchctl could not load $Label in $domain`: $($output -join ' ')" }
+    for ($i = 0; $i -lt 30; $i++) {
+        if (Test-HttpAnswers -Uri "http://127.0.0.1:$Port/api/tags" -TimeoutSeconds 3) { return $plistPath }
+        Start-Sleep -Seconds 2
+    }
+    throw "Ollama did not answer on port $Port after loading $Label; see $(Join-Path $LogDirectory 'ollama.log')."
+}
+
 if ($LibraryOnly) { return }
 
 # --- checks ------------------------------------------------------------------------------------------------------
@@ -207,9 +337,54 @@ function Invoke-ProvisionChecks {
     if ($null -ne $resolved) {
         Add-Check 'Inference profile' 'PASS' "$resolved (requested: $Profile)"
         if ($resolved -eq 'native') {
-            if ($null -eq (Get-Command ollama -ErrorAction SilentlyContinue)) { Add-Check 'Ollama (native)' 'FAIL' 'ollama was not found.' (Get-HostAdvice -HostOs $hostOs -Item 'ollama') }
-            elseif ((Invoke-PocHttpStatus -Uri 'http://localhost:11434/api/tags' -TimeoutSeconds 5) -ne 200) { Add-Check 'Ollama (native)' 'FAIL' 'Ollama is installed but does not answer on localhost:11434.' (Get-HostAdvice -HostOs $hostOs -Item 'ollama') }
-            else { Add-Check 'Ollama (native)' 'PASS' 'answers on localhost:11434' }
+            $ollamaCommand = Get-Command ollama -ErrorAction SilentlyContinue
+            # PROVISION_OLLAMA_URL exists only so tests can point this check at an address nothing listens on.
+            $ollamaUrl = if ([string]::IsNullOrWhiteSpace($env:PROVISION_OLLAMA_URL)) { 'http://localhost:11434' } else { $env:PROVISION_OLLAMA_URL }
+            $ollamaAnswers = Test-HttpAnswers -Uri "$ollamaUrl/api/tags"
+            if ($ollamaAnswers) {
+                Add-Check 'Ollama (native)' 'PASS' 'answers on localhost:11434'
+                if ($InstallPrerequisites) {
+                    Add-Check 'Ollama settings' 'WARN' 'Ollama is already running and was left alone (it may not have been started with OLLAMA_CONTEXT_LENGTH=8192).' 'Confirm the CONTEXT column of "ollama ps" shows 8192 after the first request; to let PocketMind manage Ollama, stop yours and run this script again with -InstallPrerequisites.'
+                }
+            }
+            elseif (-not $InstallPrerequisites -or $hostOs -ne 'macos') {
+                $detail = if ($null -eq $ollamaCommand) { 'ollama was not found.' } else { 'Ollama is installed but does not answer on localhost:11434.' }
+                Add-Check 'Ollama (native)' 'FAIL' $detail ((Get-HostAdvice -HostOs $hostOs -Item 'ollama') + $(if ($hostOs -eq 'macos') { ' Or run this script again with -InstallPrerequisites.' } else { '' }))
+            }
+            else {
+                $brew = Get-Command brew -ErrorAction SilentlyContinue
+                $label = 'com.pocketmind.ollama'
+                $ollamaSettings = Get-OllamaSettings
+                # The Homebrew prefix is /opt/homebrew on Apple Silicon; the symlink survives upgrades, unlike the Cellar path.
+                $brewPrefix = if ($null -ne $brew) { (& brew --prefix).Trim() } else { '/opt/homebrew' }
+                $ollamaPath = Join-Path $brewPrefix 'bin/ollama'
+                if ($null -eq $ollamaCommand -and $null -eq $brew) {
+                    Add-Check 'Ollama (native)' 'FAIL' 'ollama is not installed and Homebrew is not available to install it.' 'Install Homebrew (https://brew.sh) or Ollama (https://ollama.com/download), then run this script again.'
+                }
+                else {
+                    $plan = Get-OllamaInstallPlan -Installed ($null -ne $ollamaCommand) -OllamaPath $ollamaPath -Label $label -ContextLength $ollamaSettings.ContextLength -KeepAlive $ollamaSettings.KeepAlive
+                    if ($CheckOnly) {
+                        Add-Check 'Ollama (native)' 'WARN' 'not running; -InstallPrerequisites would set it up (nothing is installed in -CheckOnly mode).' ($plan -join ' | ')
+                    }
+                    elseif (-not (Confirm-ProvisionAction -Plan $plan -AssumeYes:$Yes)) {
+                        Add-Check 'Ollama (native)' 'FAIL' 'installation was not confirmed.' 'Run again and answer y, or pass -Yes.'
+                    }
+                    else {
+                        try {
+                            if ($null -eq $ollamaCommand) {
+                                $env:HOMEBREW_NO_AUTO_UPDATE = '1'; $env:HOMEBREW_NO_INSTALL_UPGRADE = '1'
+                                & brew install ollama
+                                if ($LASTEXITCODE -ne 0) { throw 'brew install ollama failed.' }
+                            }
+                            $ollamaEnvironment = [ordered]@{ OLLAMA_CONTEXT_LENGTH = $ollamaSettings.ContextLength; OLLAMA_KEEP_ALIVE = $ollamaSettings.KeepAlive }
+                            $plist = Install-OllamaLaunchAgent -Label $label -OllamaPath $ollamaPath -Environment $ollamaEnvironment
+                            $version = (& $ollamaPath --version 2>&1 | Select-Object -Last 1)
+                            Add-Check 'Ollama (native)' 'PASS' "installed and started by launchd ($plist); $version" 'This stack was exercised with Homebrew Ollama 0.30.11; a newer version is untested here.'
+                        }
+                        catch { Add-Check 'Ollama (native)' 'FAIL' $_.Exception.Message 'Fix the error above, or install and start Ollama yourself (see the guide).' }
+                    }
+                }
+            }
         }
         elseif ($resolved -eq 'nvidia') {
             if (Test-PocDockerNvidia) { Add-Check 'NVIDIA GPU in Docker' 'PASS' 'a container can use the GPU' }

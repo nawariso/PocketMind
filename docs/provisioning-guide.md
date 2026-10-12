@@ -32,7 +32,7 @@ Settle these before you run anything; most are hard to change after users arrive
 | Network (outbound) | `registry-1.docker.io`, `ghcr.io` together with `pkg-containers.githubusercontent.com`, `docker.litellm.ai`, and `registry.ollama.ai`. A gateway that blocks these makes pulls fail (`unexpected EOF`, or a "denied" page). |
 | Network (inbound) | Users reach two ports: Open WebUI (default 8480) and the API (default 8481). Nothing else needs to be open. |
 
-PowerShell, Docker, and Ollama are not installed by the scripts. A failed check names what is missing and how to install it.
+By default the scripts install nothing: a failed check names what is missing and how to install it. With `--InstallPrerequisites` (section 3) they can install PowerShell 7 and, on macOS, Ollama. Docker is never installed by them.
 
 ## 3. Provision
 
@@ -65,7 +65,21 @@ The order, and what each step does:
 
 It stops at the first failure and is safe to run again: `.env` and data are kept, and each step changes only what differs.
 
-Options: `-Profile cpu|nvidia|native`, `-PublicHost <ip-or-name>`, `-NoPull`, `-SkipNetworkCheck`, `-EnableSignup` (use `--` instead of `-` with the shell wrapper).
+Options: `-Profile cpu|nvidia|native`, `-PublicHost <ip-or-name>`, `-NoPull`, `-SkipNetworkCheck`, `-EnableSignup`, `-InstallPrerequisites`, `-Yes` (use `--` instead of `-` with the shell wrapper).
+
+### Installing prerequisites (optional)
+
+`--InstallPrerequisites` installs what is missing, after printing the commands and asking (`--Yes` skips the question; with no terminal and no `--Yes` it refuses). With `--CheckOnly` it prints the plan and installs nothing. It never upgrades something already installed, and it never installs Docker, the NVIDIA toolkit, or anything on Windows.
+
+| What | Where | How |
+|---|---|---|
+| PowerShell 7 | macOS | `brew install powershell` with Homebrew told not to update itself or upgrade anything. |
+| PowerShell 7 | Ubuntu, Debian | Microsoft's package repository (`packages-microsoft-prod.deb`), then `apt-get install powershell`; only when Microsoft publishes that repository for your exact distribution and version. |
+| PowerShell 7 | RHEL family (Rocky, Alma, RHEL, CentOS) | Microsoft's repository package, then `dnf install powershell`; same condition. |
+| PowerShell 7 | any other Linux | Not automatic: the manual link is printed. |
+| Ollama | macOS (`native` profile) | `brew install ollama` if missing, then a launchd agent (`com.pocketmind.ollama`) that starts `ollama serve` at login and keeps it running with `OLLAMA_CONTEXT_LENGTH` and `OLLAMA_KEEP_ALIVE` from `.env` (Ollama stays on `127.0.0.1`). An Ollama that already answers on port 11434 is left alone and a warning says to check its context length. |
+
+Root is needed on Linux (the script asks for the `sudo` password first). Installing adds Microsoft's package repository, or Homebrew's formula, to the host: it trusts those sources, so use it only where that is acceptable. What was and was not exercised is in the [checklist](server-deployment-checklist.md).
 
 The generated `.env` is private (mode 600 on Linux and macOS): keep it out of Git and back it up. It holds the administrator password (`WEBUI_ADMIN_PASSWORD`), the LiteLLM master key, and the Grafana password.
 
@@ -117,7 +131,7 @@ Testing from a second device matters: every check made while building this ran o
 - **Reach the administration pages.** LiteLLM (`http://localhost:4000/ui`, user `admin`, password = `LITELLM_MASTER_KEY` in `.env`) and Grafana (`http://localhost:3001`, user and password from `.env`) listen on the server's loopback only. Open them in a browser on the server, or forward the ports from your PC with SSH (`ssh -L 4000:localhost:4000 -L 3001:localhost:3001 <server>`; standard SSH, not exercised here).
 - **Create LiteLLM teams** if usage should be split by team: LiteLLM UI → Teams, add members by email. Each team is mirrored to an Open WebUI group automatically (at most every 10 minutes, when someone uses the API Key Manager) or at once when an administrator types `sync` in it. A user in no team is attributed to `unassigned`.
 - **Tune the API Key Manager** in Admin Panel → Functions → API Key Manager → Valves: allowed models, key lifetime (30 days), rate and concurrency limits, number of keys per user (20).
-- **macOS only: keep Ollama running** with the environment above (it stops with the session if started by hand, and then LiteLLM answers 500).
+- **macOS only: keep Ollama running** with the environment above. `--InstallPrerequisites` sets this up as a launchd agent; an Ollama you started by hand stops with the session, and then LiteLLM answers 500.
 - **Plan backups**: `.env`, PostgreSQL, and the `openwebui_data` volume (see the [backup guide](backup-and-restore.md)); a user's key cannot be recovered from a backup, they ask for a new one.
 - **Plan HTTPS** before real use, and SSO if people should register themselves (an email-domain limit exists only for SSO).
 
