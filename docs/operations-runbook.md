@@ -1,6 +1,6 @@
 # PocketMind Operations Runbook
 
-Use the root README for first-time setup. Use this runbook for a system that has already been configured with a private `.env`.
+For a first installation follow the [provisioning guide](provisioning-guide.md) (what was verified and what was not is in the [server deployment checklist](server-deployment-checklist.md)). Use this runbook for a system that is already running with a private `.env`.
 
 ## Normal startup
 
@@ -58,10 +58,6 @@ pwsh ./scripts/model-lab.ps1 remove -Alias lab-<name> -Profile auto
 ```
 
 Use `-DeleteWeights` only after confirming no other lab alias uses the physical model. Model Lab refuses to delete production or shared weights.
-
-## First start of a new installation
-
-Follow the [provisioning guide](provisioning-guide.md): the decisions to make first, the one command (`provision.sh` or `provision.ps1`), the same steps by hand, the checks, and the work to do afterwards. What was verified and what was not is in the [server deployment checklist](server-deployment-checklist.md).
 
 ## Move Open WebUI to another build
 
