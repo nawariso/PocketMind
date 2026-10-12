@@ -61,18 +61,11 @@ Use `-DeleteWeights` only after confirming no other lab alias uses the physical 
 
 ## First start of a new installation
 
-Run `./scripts/provision.sh --AdminEmail <email>` (Linux/macOS) or `pwsh ./scripts/provision.ps1 -AdminEmail <email>`. It checks the host (`-CheckOnly` stops there), creates `.env` with random secrets and the bootstrap administrator when none exists, runs `check-prerequisites.ps1`, `setup.ps1 -Pull`, `verify-stack.ps1`, `configure-open-webui.ps1`, and `install-key-manager.ps1` in that order, and stops at the first failure. Re-running it is safe: `.env` is kept and each step changes only what differs.
+Follow the [provisioning guide](provisioning-guide.md): the decisions to make first, the one command (`provision.sh` or `provision.ps1`), the same steps by hand, the checks, and the work to do afterwards. What was verified and what was not is in the [server deployment checklist](server-deployment-checklist.md).
 
-The steps it performs, if you prefer to run them yourself:
+## Move Open WebUI to another build
 
-1. Put long random values in the private `.env`, including `WEBUI_ADMIN_EMAIL` and `WEBUI_ADMIN_PASSWORD` (see `.env.example`). Open WebUI creates that administrator on its first start and closes sign-up; without them the first visitor becomes administrator, so do not expose a new installation on a network before the account exists. `OPEN_WEBUI_IMAGE` is already pinned to the tested build and `DEFAULT_USER_ROLE=user` approves new accounts at once.
-2. `setup.ps1 -Pull`, then `verify-stack.ps1`.
-3. `configure-open-webui.ps1 -AdminEmail <email>` sets what Open WebUI keeps in its database: the role of new accounts, the Task Model (`corp-general`), access for the models users may see, and `corp-ocr` with Built-in Tools off. Then `install-key-manager.ps1 -AdminEmail <email> -PublicBaseUrl http://<host-ip>:8481/v1`.
-4. Create LiteLLM teams (members by email) if usage should be split by team, and confirm `curl -s http://localhost:3000/api/config` shows sign-up closed.
-
-To move Open WebUI to another build, pull it, run the tests and the API Key Manager checks, then change the digest in `.env.example` and the compose defaults together (`tests/config-contract.ps1` requires a digest, not a moving tag).
-
-The full list of what was verified and what was not is in the [server deployment checklist](server-deployment-checklist.md).
+Open WebUI is pinned to a digest in `.env.example` and in both compose defaults, so it changes only when you change the pin. Pull the new build, run the tests and the API Key Manager checks (the Pipe depends on Open WebUI internals, and a key must still stay out of titles, tags, and follow-ups), then change the digest in `.env.example` and both compose defaults together; `tests/config-contract.ps1` requires a digest, not a moving tag. A `.env` made earlier keeps its own `OPEN_WEBUI_IMAGE`, so edit that line on every server. The tested digest and the reason for pinning are in the checklist.
 
 ## Native Ollama on macOS
 

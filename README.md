@@ -55,7 +55,7 @@ PowerShell 7 installation: [Microsoft documentation](https://learn.microsoft.com
 
 ## Provision a server with one command
 
-On a new host, clone the repository and run one script. It checks the host first (operating system, Docker and Compose versions, memory and disk, ports, the inference runtime, registry reachability, firewall notes), then does every step in the right order, so nothing depends on you running scripts in the correct sequence:
+On a new host, clone the repository and run one script. It checks the host first, then does every step in the right order, so nothing depends on you running scripts in the correct sequence:
 
 ```text
 # Linux or macOS
@@ -65,13 +65,13 @@ On a new host, clone the repository and run one script. It checks the host first
 powershell -ExecutionPolicy Bypass -File .\scripts\provision.ps1 -AdminEmail you@example.com
 ```
 
-Add `-CheckOnly` (`--CheckOnly` with the shell wrapper) to see what is missing without changing anything. The order is: host checks, a private `.env` created from `.env.example` with random secrets and the administrator you named (an existing `.env` is never overwritten), the prerequisite check for the chosen profile, `setup.ps1 -Pull`, `verify-stack.ps1`, `configure-open-webui.ps1` (new accounts get the `user` role and are approved at once, the Task Model, the models users may see, `corp-ocr` with Built-in Tools off), and `install-key-manager.ps1` with the Valve `public_base_url` set to this host's address. Running it again on an installed system keeps `.env` and the data, and changes only what differs. Options: `-Profile cpu|nvidia|native`, `-PublicHost <ip-or-name>` (a value you give is applied to the API Key Manager Valve `public_base_url`; without it, an address an administrator already set there is kept), `-NoPull`, `-SkipNetworkCheck`, and `-EnableSignup`. A new installation also refuses to start when `.env` has no administrator and the proxy listens beyond this host, because the first visitor would become administrator.
+Add `-CheckOnly` (`--CheckOnly` with the shell wrapper) to see what is missing without changing anything. In short it runs the host checks, creates a private `.env` when none exists, then `check-prerequisites.ps1`, `setup.ps1 -Pull`, `verify-stack.ps1`, `configure-open-webui.ps1`, and `install-key-manager.ps1`. Running it again keeps `.env` and the data and changes only what differs. The decisions to make first, the options, the same steps by hand, how to check the result, what to do afterwards, and a checklist are in [docs/provisioning-guide.md](docs/provisioning-guide.md).
 
 **Who may register.** The administrator created from `.env` closes sign-up, so by default only accounts an administrator adds exist, and they get the `user` role at once (`DEFAULT_USER_ROLE=user`). `-EnableSignup` turns self-registration on; with the `user` role that means anyone who can reach Open WebUI can chat and create API keys, there is no email-domain limit, email addresses are not verified, and team attribution by email can be claimed by anyone. Use it only on a network you trust, or put SSO in front instead.
 
-It does not install Docker, PowerShell, the NVIDIA toolkit, or Ollama; a failed check prints what to install for that operating system. `provision.sh` only needs PowerShell 7 (`pwsh`) to exist. CI runs the helpers and the host-check logic on Windows, macOS, and Linux (and under Windows PowerShell 5.1 on Windows, which has not been run locally); the full provisioning run was exercised on macOS only (see [docs/server-deployment-checklist.md](docs/server-deployment-checklist.md)).
+It does not install Docker, PowerShell, the NVIDIA toolkit, or Ollama; a failed check prints what to install for that operating system. The full run was exercised on macOS only; see [docs/server-deployment-checklist.md](docs/server-deployment-checklist.md) for what was and was not verified.
 
-The manual steps below do the same thing one script at a time.
+The manual steps below (First-time repository setup and Quick start) do the same thing one script at a time.
 
 ## First-time repository setup
 
@@ -84,7 +84,7 @@ Copy-Item .env.example .env
 notepad .env
 ```
 
-On macOS or Linux, use `cp .env.example .env` and edit the file with your preferred editor. For a new installation also set `WEBUI_ADMIN_EMAIL` and `WEBUI_ADMIN_PASSWORD` before the first start: Open WebUI then creates that administrator and closes sign-up, whereas otherwise the first person who opens it becomes the administrator. `DEFAULT_USER_ROLE=user` (the default) approves accounts created or signing in later at once; Open WebUI keeps the stored role after the first start, so change it later in Admin Panel -> Settings -> General. Before moving to a server, read [docs/server-deployment-checklist.md](docs/server-deployment-checklist.md). The `.env` file is intentionally excluded from Git because it contains credentials. Compose supplies the LiteLLM key to Prometheus as a runtime config without creating a tracked secret file. Docker named volumes hold runtime state and are also local to each Docker host.
+On macOS or Linux, use `cp .env.example .env` and edit the file with your preferred editor. For a new installation also set `WEBUI_ADMIN_EMAIL` and `WEBUI_ADMIN_PASSWORD` before the first start: Open WebUI then creates that administrator and closes sign-up, whereas otherwise the first person who opens it becomes the administrator. `DEFAULT_USER_ROLE=user` (the default) approves other accounts at once; Open WebUI keeps the stored role after the first start, so change it later in Admin Panel -> Settings -> General. The `.env` file is intentionally excluded from Git because it contains credentials. Compose supplies the LiteLLM key to Prometheus as a runtime config without creating a tracked secret file. Docker named volumes hold runtime state and are also local to each Docker host.
 
 ## Quick start: start the stack
 
@@ -469,14 +469,7 @@ PROXY_BIND_ADDRESS=0.0.0.0
 
 `PROXY_BIND_ADDRESS` defaults to `0.0.0.0`, so the proxy is reachable from every machine that can route to this host. Set it to the host's LAN IP to use one interface only, or to `127.0.0.1` to keep it on this host. Once `PROXY_ENABLED=true` is in `.env`, every script (`setup`, `verify-stack`, and so on) adds the overlay automatically, so a later run cannot remove the proxy as an orphan. Then run `pwsh ./scripts/setup.ps1 -Profile <profile>` and `pwsh ./scripts/verify-stack.ps1 -Profile <profile>`; the verifier creates a short-lived scoped key, chats through the API port, and checks that the administration paths return 404. Set the API Key Manager Valve `public_base_url` to `http://<host-ip>:8481/v1`.
 
-Limit who may connect with a git-ignored file in `nginx/local/`, for example `nginx/local/clients.conf`:
-
-```text
-allow 10.0.0.0/8;
-deny all;
-```
-
-Apply it with `docker exec pocketmind-nginx nginx -s reload`. Do not rely on the host firewall for this: on Linux, ports published by Docker Engine are typically handled by Docker's own iptables rules and can bypass `ufw`; check on the shared host. On Docker Desktop (observed on macOS) nginx sees every client as the VM gateway address, so address rules and per-address rate limits are meaningless there; look at the client address in `docker logs pocketmind-nginx` on the shared host before trusting them.
+Limit who may connect with a git-ignored `nginx/local/*.conf` (`allow <cidr>;` lines and `deny all;`), not with the host firewall: on Linux, ports published by Docker Engine are typically handled by Docker's own iptables rules and can bypass `ufw`, and on Docker Desktop (observed on macOS) nginx sees every client as the VM gateway address, so address rules and per-address rate limits cannot tell clients apart there. The steps and how to see the real client address are in the [operations runbook](docs/operations-runbook.md#shared-pilot-proxy-nginx).
 
 The API port limits each client address to 30 requests per second (burst 60), Open WebUI's sign-in and session endpoints to 2 per second (burst 10) to slow password guessing, and the proxy accepts bodies up to 50 MB, enough for base64 OCR images. Browsers may call the API cross-origin (OPTIONS preflight is allowed). Traffic is not encrypted: passwords and API keys can be read on the network, so use it only on a trusted internal network with test data, never on the internet, and move to HTTPS before real use. Use strong secrets in `.env`, keep sign-up closed, and see ADR 0005 and the security guidance.
 

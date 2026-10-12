@@ -7,6 +7,7 @@ This directory separates current operational knowledge from historical implement
 Use these documents for the running system:
 
 - [Architecture](architecture.md) — components, request paths, profiles, persistence, and trust boundaries.
+- [Provisioning guide](provisioning-guide.md) — the ordered steps to bring up a new server, how to check it, what to do by hand afterwards, and a checklist.
 - [Operations runbook](operations-runbook.md) — startup, verification, model lifecycle, native macOS Ollama and host monitoring, master-key rotation, API Key Manager, shared pilot proxy, usage reports, diagnostics, and emergency procedures.
 - [Security](security.md) — credentials, localhost-only policy, the shared pilot proxy, accounts and sign-up, API keys, tunnels, and incident response.
 - [Backup and restore](backup-and-restore.md) — what state matters and how to preserve or restore it.
