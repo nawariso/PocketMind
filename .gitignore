@@ -11,6 +11,10 @@ Thumbs.db
 .idea/
 *.swp
 
+# Python bytecode
+__pycache__/
+*.pyc
+
 # Local logs and temporary output
 *.log
 tmp/

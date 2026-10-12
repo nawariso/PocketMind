@@ -18,6 +18,7 @@ if (Test-Path -LiteralPath $pipePath) {
         'user_id={urllib.parse.quote(user_id)}',     # keys are always looked up by the caller
         '.get("user_id") == user_id',                # ownership is re-checked on the response
         '"duration": self.valves.key_duration',      # every key expires
+        'default=20, ge=1, le=100',                  # total key cap per user
         '"models": [model]',                         # every key is limited to exactly one model
         'self._pick_model(',                         # the model must come from the administrator's list
         'members_with_roles',                        # the key's team comes from LiteLLM team membership

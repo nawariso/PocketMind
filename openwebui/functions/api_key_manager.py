@@ -1,8 +1,8 @@
 """
 title: API Key Manager
 author: PocketMind
-version: 0.3.0
-description: Lets signed-in Open WebUI users create, list, rotate, and revoke their own LiteLLM API keys, one model per key, attributed to the LiteLLM team they belong to. LiteLLM teams are the single source of truth and are mirrored to Open WebUI groups.
+version: 0.4.0
+description: Lets signed-in Open WebUI users create, list, rotate, and revoke their own LiteLLM API keys, one model per key and several keys per model, attributed to the LiteLLM team they belong to. LiteLLM teams are the single source of truth and are mirrored to Open WebUI groups.
 """
 
 import asyncio
@@ -39,7 +39,7 @@ class Pipe:
         rpm_limit: int = Field(default=20, ge=1, description="Requests per minute per key.")
         tpm_limit: int = Field(default=30000, ge=1, description="Tokens per minute per key.")
         max_parallel_requests: int = Field(default=1, ge=1, description="Concurrent requests per key.")
-        max_keys_per_user: int = Field(default=5, ge=1, le=20, description="Active keys one user may hold (one per model).")
+        max_keys_per_user: int = Field(default=20, ge=1, le=100, description="Active keys one user may hold in total, across all models.")
         unassigned_team_alias: str = Field(
             default="unassigned",
             description="LiteLLM team for users who belong to no LiteLLM team. Leave empty to issue keys without a team.",
@@ -256,7 +256,7 @@ class Pipe:
         if orphans:
             lines.append("- Groups whose LiteLLM team no longer exists (kept, remove by hand if unneeded): " + ", ".join(f"`{n}`" for n in orphans))
         if stale:
-            lines.append(f"- Keys whose owner left the key's team ({len(stale)}); ask these users to `rotate <model>`: " + ", ".join(f"`{a}`" for a in stale[:20]))
+            lines.append(f"- Keys whose owner left the key's team ({len(stale)}); ask these users to `rotate <alias>`: " + ", ".join(f"`{a}`" for a in stale[:20]))
         return "\n".join(lines)
 
     async def _auto_sync(self):
@@ -274,10 +274,10 @@ class Pipe:
             task.add_done_callback(self._tasks.discard)
 
     # ---- commands ---------------------------------------------------------
-    def _create(self, user, model, team_id, team_alias):
+    def _create(self, user, model, team_id, team_alias, label=None):
         alias_name = re.sub(r"[^a-z0-9]+", "-", (user.get("email") or user["id"]).split("@")[0].lower()).strip("-")[:20] or "user"
         model_slug = re.sub(r"[^a-z0-9]+", "-", model.lower()).strip("-")[:24]
-        alias = f"owui-{alias_name}-{model_slug}-{secrets.token_hex(2)}"
+        alias = "-".join(p for p in ("owui", alias_name, model_slug, label, secrets.token_hex(2)) if p)
         payload = {
             "key_alias": alias,
             "user_id": user["id"],
@@ -286,7 +286,7 @@ class Pipe:
             "rpm_limit": self.valves.rpm_limit,
             "tpm_limit": self.valves.tpm_limit,
             "max_parallel_requests": self.valves.max_parallel_requests,
-            "metadata": {"source": "open-webui", "email": user.get("email"), "name": user.get("name"), "model": model},
+            "metadata": {"source": "open-webui", "email": user.get("email"), "name": user.get("name"), "model": model, "label": label},
         }
         if team_id:
             payload["team_id"] = team_id
@@ -300,7 +300,7 @@ class Pipe:
             f"```\n{key}\n```\n\n"
             "**Copy it now.** It is shown only once and cannot be retrieved later. "
             "This message is saved in this chat, so delete the chat after copying the key.\n\n"
-            f"- Alias: `{alias}`\n- Model: `{model}` (this key cannot call other models)\n"
+            f"- Alias: `{alias}`\n- Label: {f'`{label}`' if label else 'none'}\n- Model: `{model}` (this key cannot call other models)\n"
             f"- Team: {f'`{team_alias}`' if team_id else 'none'}\n"
             f"- Expires: {result.get('expires') or 'n/a'}\n"
             f"- Limits: {self.valves.rpm_limit} requests/min, {self.valves.tpm_limit} tokens/min, "
@@ -311,34 +311,55 @@ class Pipe:
             f"  -d '{{\"model\":\"{model}\",\"messages\":[{{\"role\":\"user\",\"content\":\"Hello\"}}]}}'\n```\n"
         )
 
+    @staticmethod
+    def _clean_label(text):
+        return re.sub(r"[^a-z0-9]+", "-", (text or "").lower()).strip("-")[:24]
+
+    def _select_keys(self, keys, token):
+        exact = [k for k in keys if k.get("key_alias") == token]
+        if exact:
+            return exact
+        return [k for k in keys if (self._key_model(k) or "").lower() == token.lower()]
+
     def _describe(self, keys):
         if not keys:
             return "You have no active API keys. Type `models` to see what you can request, then `new <model>`."
-        lines = ["### Your API keys", "", "| Model | Alias | Key | Expires |", "|---|---|---|---|"]
+        lines = [
+            f"### Your API keys ({len(keys)} of {self.valves.max_keys_per_user})", "",
+            "| Model | Label | Alias | Key | Expires |", "|---|---|---|---|---|",
+        ]
         for k in keys:
             lines.append(
-                f"| `{self._key_model(k) or ', '.join(k.get('models') or []) or 'n/a'}` | `{k.get('key_alias')}` | "
+                f"| `{self._key_model(k) or ', '.join(k.get('models') or []) or 'n/a'}` | "
+                f"{(k.get('metadata') or {}).get('label') or '-'} | `{k.get('key_alias')}` | "
                 f"`{k.get('key_name') or 'hidden'}` | {k.get('expires') or 'never'} |"
             )
         return "\n".join(lines)
 
     def _models_text(self, keys):
-        have = {self._key_model(k) for k in keys}
-        lines = ["### Models you can request a key for", "", "| Model | Your key |", "|---|---|"]
+        counts = {}
+        for k in keys:
+            counts[self._key_model(k)] = counts.get(self._key_model(k), 0) + 1
+        lines = ["### Models you can request a key for", "", "| Model | Your keys |", "|---|---|"]
         for model in self._models():
-            lines.append(f"| `{model}` | {'yes' if model in have else 'no'} |")
-        lines.append("\nType `new <model>` to create a key for one model, for example `new " + self._models()[0] + "`.")
+            lines.append(f"| `{model}` | {counts.get(model, 0)} |")
+        lines.append(
+            f"\nYou may hold {self.valves.max_keys_per_user} keys in total. "
+            "Type `new <model>` to create a key for one model, for example `new " + self._models()[0] + "`."
+        )
         return "\n".join(lines)
 
     def _help(self):
         return (
-            "### API Key Manager\n\nEach key works for **one model**. Type one of these commands:\n\n"
+            "### API Key Manager\n\nEach key works for **one model**, and you can create several keys for the same model. "
+            "Type one of these commands:\n\n"
             "| Command | What it does |\n|---|---|\n"
             "| `models` | Show the models you can request a key for |\n"
-            "| `new <model>` | Create your key for that model (shown **once**) |\n"
+            "| `new <model>` | Create a key for that model (shown **once**) |\n"
+            "| `new <model> as <label>` | Create a key with a name, for example `new corp-general as my-app` |\n"
             "| `list` | Show your keys without revealing them |\n"
-            "| `rotate <model>` | Replace your key for that model |\n"
-            "| `revoke <model or alias>` | Revoke a key |\n"
+            "| `rotate <alias or model>` | Replace a key (use the alias when you have several for a model) |\n"
+            "| `revoke <alias or model>` | Revoke a key (`revoke <model> all` revokes every key for that model) |\n"
             "| `help` | Show this message |\n"
         )
 
@@ -373,45 +394,73 @@ class Pipe:
             if action == "models":
                 return self._models_text(keys)
 
-            if action in ("new", "rotate", "revoke"):
-                if not args:
-                    return f"Tell me which model, for example `{action} {self._models()[0]}`.\n\n" + self._models_text(keys)
+            if action in ("new", "rotate", "revoke") and not args:
+                return f"Tell me which model, for example `{action} {self._models()[0]}`.\n\n" + (
+                    self._models_text(keys) if action == "new" else self._describe(keys)
+                )
 
             if action == "revoke":
-                target = args[0]
-                targets = [k for k in keys if k.get("key_alias") == target or (self._key_model(k) or "").lower() == target.lower()]
+                targets = self._select_keys(keys, args[0])
+                revoke_all = len(args) > 1 and args[1].lower() == "all"
                 if not targets:
                     return "No matching key of yours was found.\n\n" + self._describe(keys)
+                if len(targets) > 1 and not revoke_all:
+                    return (
+                        f"You have {len(targets)} keys for `{args[0]}`. Revoke one by its alias, or type `revoke {args[0]} all`.\n\n"
+                        + self._describe(targets)
+                    )
                 if await asyncio.to_thread(self._cooling_down, user["id"]):
                     return f"Please wait {self.valves.cooldown_seconds} seconds before trying again."
                 for key in targets:
                     await asyncio.to_thread(self._litellm, "POST", "/key/delete", {"key_aliases": [key["key_alias"]]})
                 return f"Revoked {len(targets)} key(s). Anything using it will now receive 401."
 
-            # new / rotate
+            if action == "rotate":
+                targets = self._select_keys(keys, args[0])
+                if not targets:
+                    return "No matching key of yours was found. Type `list` to see your keys, or `new <model>` to create one.\n\n" + self._describe(keys)
+                if len(targets) > 1:
+                    return f"You have {len(targets)} keys for `{args[0]}`. Rotate one by its alias.\n\n" + self._describe(targets)
+                old = targets[0]
+                model = self._key_model(old)
+                if not model:
+                    return "That key was issued before one-model keys and cannot be rotated. Revoke it by alias, then create a new one."
+                team_id, team_alias, team_problem = await asyncio.to_thread(
+                    self._resolve_team, user, " ".join(args[1:]) or None, old.get("team_id")
+                )
+                if team_problem:
+                    return team_problem
+                if await asyncio.to_thread(self._cooling_down, user["id"]):
+                    return f"Please wait {self.valves.cooldown_seconds} seconds before trying again."
+                await asyncio.to_thread(self._litellm, "POST", "/key/delete", {"key_aliases": [old["key_alias"]]})
+                return await asyncio.to_thread(
+                    self._create, user, model, team_id, team_alias, (old.get("metadata") or {}).get("label")
+                )
+
+            # new <model> [team] [as <label>]
             model = self._pick_model(args[0])
             if not model:
                 return f"`{args[0]}` is not available for API keys.\n\n" + self._models_text(keys)
-            existing = [k for k in keys if self._key_model(k) == model]
-            if action == "new":
-                if existing:
-                    return f"You already have a key for `{model}`. Type `rotate {model}` to replace it or `revoke {model}` to remove it."
-                if len(keys) >= self.valves.max_keys_per_user:
-                    return f"You already have {len(keys)} keys, the maximum is {self.valves.max_keys_per_user}.\n\n" + self._describe(keys)
-            elif not existing:
-                return f"You have no key for `{model}` to rotate. Type `new {model}` instead."
-
-            current_team = existing[0].get("team_id") if existing else None
-            team_id, team_alias, team_problem = await asyncio.to_thread(
-                self._resolve_team, user, " ".join(args[1:]) or None, current_team
-            )
+            rest = args[1:]
+            label = None
+            for index, word in enumerate(rest):
+                if word.lower() == "as":
+                    label = self._clean_label(" ".join(rest[index + 1:]))
+                    if not label:
+                        return "Give the label some letters or numbers, for example `new " + model + " as my-app`."
+                    rest = rest[:index]
+                    break
+            if len(keys) >= self.valves.max_keys_per_user:
+                return (
+                    f"You already have {len(keys)} keys, the maximum is {self.valves.max_keys_per_user}. "
+                    "Revoke one with `revoke <alias>` first.\n\n" + self._describe(keys)
+                )
+            team_id, team_alias, team_problem = await asyncio.to_thread(self._resolve_team, user, " ".join(rest) or None, None)
             if team_problem:
                 return team_problem
             if await asyncio.to_thread(self._cooling_down, user["id"]):
                 return f"Please wait {self.valves.cooldown_seconds} seconds before trying again."
-            for key in existing:
-                await asyncio.to_thread(self._litellm, "POST", "/key/delete", {"key_aliases": [key["key_alias"]]})
-            return await asyncio.to_thread(self._create, user, model, team_id, team_alias)
+            return await asyncio.to_thread(self._create, user, model, team_id, team_alias, label)
         except RuntimeError as error:
             return f"Sorry, the request could not be completed: {error}"
         return self._help()

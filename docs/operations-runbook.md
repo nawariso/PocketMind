@@ -112,8 +112,8 @@ The script prompts for the admin password (or reads `OPENWEBUI_ADMIN_PASSWORD`),
 
 Operations:
 
-- A user revokes with `revoke <model>`; an administrator can also delete the key in LiteLLM → Virtual Keys.
-- Teams are managed only in LiteLLM (add members by email). `sync` as an administrator mirrors teams to Open WebUI groups and lists keys whose owner left the team; those users run `rotate <model>`.
+- Users may hold several keys per model, up to the `max_keys_per_user` Valve (default 20). A user revokes with `revoke <alias>` (or `revoke <model>` when only one exists, `revoke <model> all` for every key of a model); an administrator can also delete a key in LiteLLM → Virtual Keys. Saved Valves override code defaults, so raise or lower the cap in Admin Panel → Functions → API Key Manager → Valves.
+- Teams are managed only in LiteLLM (add members by email). `sync` as an administrator mirrors teams to Open WebUI groups and lists keys whose owner left the team; those users run `rotate <alias>`.
 - Deleting a LiteLLM team deletes its keys, including the `unassigned` team that holds keys of users in no team.
 - After every Open WebUI upgrade, create a key in a test chat and confirm it does not appear in the chat title, tags, or follow-ups.
 - Users call LiteLLM directly. Before anyone off this host uses a key, publish only `/v1/*` through a TLS proxy and never `/ui`, `/key`, or `/model`.

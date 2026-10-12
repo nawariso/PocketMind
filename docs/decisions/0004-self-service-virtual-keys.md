@@ -8,9 +8,9 @@ Pilot users should work in one system, Open WebUI, but some also need an API key
 
 ## Decision
 
-Provide an Open WebUI Pipe, `openwebui/functions/api_key_manager.py`, installed with `scripts/install-key-manager.ps1`. It appears as the model "API Key Manager" and understands only fixed commands: `models`, `new <model>`, `list`, `rotate <model>`, `revoke <model|alias>`, `help`, and the administrator-only `sync`. No language model is involved.
+Provide an Open WebUI Pipe, `openwebui/functions/api_key_manager.py`, installed with `scripts/install-key-manager.ps1`. It appears as the model "API Key Manager" and understands only fixed commands: `models`, `new <model> [as <label>]`, `list`, `rotate <alias|model>`, `revoke <alias|model>`, `help`, and the administrator-only `sync`. No language model is involved.
 
-Each key is limited to exactly one model, chosen by the user from the administrator's list, so a user holds at most one key per model. A key is bound to the user's Open WebUI user ID and has a mandatory expiry, requests-per-minute and tokens-per-minute limits, and a concurrency limit. Limits and the model list are administrator Valves.
+Each key is limited to exactly one model, chosen by the user from the administrator's list, and a user may create several keys for the same model, for example one per application, each with an optional label. The total per user is capped (default 20, a Valve). With several keys for a model, `rotate` and `revoke` take the key's alias; `revoke <model> all` removes every key for that model. A key is bound to the user's Open WebUI user ID and has a mandatory expiry, requests-per-minute and tokens-per-minute limits, and a concurrency limit. Limits and the model list are administrator Valves.
 
 Usage is attributed to teams, and LiteLLM teams are the single place to manage them. A user belongs to a team when their email, or Open WebUI user ID, is a member of the LiteLLM team (add members by email in the LiteLLM UI). The key carries that team ID. A user in several teams must name one (`new <model> <team>`); a user in none uses the `unassigned` team. Members the Pipe never added cannot be moved with `key/update` later (LiteLLM rejects it), so a key's team is fixed when it is created or rotated.
 
