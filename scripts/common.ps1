@@ -3,6 +3,11 @@ Set-StrictMode -Version Latest
 
 $script:PocRepoRoot = Split-Path -Parent $PSScriptRoot
 
+# Every endpoint these scripts call is on this host. A system or PAC proxy (for example a corporate secure web
+# gateway agent) must not intercept them; such agents answer loopback requests with HTTP 500.
+try { [System.Net.Http.HttpClient]::DefaultProxy = New-Object System.Net.WebProxy } catch { }
+try { [System.Net.WebRequest]::DefaultWebProxy = New-Object System.Net.WebProxy } catch { }
+
 function Get-PocEnv {
     param([string] $Path = (Join-Path $script:PocRepoRoot '.env'))
 
