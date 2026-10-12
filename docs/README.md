@@ -11,6 +11,7 @@ Use these documents for the running system:
 - [Security](security.md) — credentials, localhost-only policy, the shared pilot proxy, accounts and sign-up, API keys, tunnels, and incident response.
 - [Backup and restore](backup-and-restore.md) — what state matters and how to preserve or restore it.
 - [Troubleshooting](troubleshooting.md) — symptom-oriented diagnosis and recovery.
+- [Server deployment checklist](server-deployment-checklist.md) — what was verified for a shared pilot on a server, what must be done first, and the known limits.
 
 ## Model knowledge
 

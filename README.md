@@ -53,6 +53,26 @@ Plain `docker compose up -d` is intentionally the portable CPU-safe stack, but u
 
 PowerShell 7 installation: [Microsoft documentation](https://learn.microsoft.com/powershell/scripting/install/installing-powershell). The scripts also remain compatible with Windows PowerShell 5.1.
 
+## Provision a server with one command
+
+On a new host, clone the repository and run one script. It checks the host first (operating system, Docker and Compose versions, memory and disk, ports, the inference runtime, registry reachability, firewall notes), then does every step in the right order, so nothing depends on you running scripts in the correct sequence:
+
+```text
+# Linux or macOS
+./scripts/provision.sh --AdminEmail you@example.com
+
+# Windows (PowerShell 5.1 or 7)
+powershell -ExecutionPolicy Bypass -File .\scripts\provision.ps1 -AdminEmail you@example.com
+```
+
+Add `-CheckOnly` (`--CheckOnly` with the shell wrapper) to see what is missing without changing anything. The order is: host checks, a private `.env` created from `.env.example` with random secrets and the administrator you named (an existing `.env` is never overwritten), the prerequisite check for the chosen profile, `setup.ps1 -Pull`, `verify-stack.ps1`, `configure-open-webui.ps1` (new accounts get the `user` role and are approved at once, the Task Model, the models users may see, `corp-ocr` with Built-in Tools off), and `install-key-manager.ps1` with the Valve `public_base_url` set to this host's address. Running it again on an installed system keeps `.env` and the data, and changes only what differs. Options: `-Profile cpu|nvidia|native`, `-PublicHost <ip-or-name>` (a value you give is applied to the API Key Manager Valve `public_base_url`; without it, an address an administrator already set there is kept), `-NoPull`, `-SkipNetworkCheck`, and `-EnableSignup`. A new installation also refuses to start when `.env` has no administrator and the proxy listens beyond this host, because the first visitor would become administrator.
+
+**Who may register.** The administrator created from `.env` closes sign-up, so by default only accounts an administrator adds exist, and they get the `user` role at once (`DEFAULT_USER_ROLE=user`). `-EnableSignup` turns self-registration on; with the `user` role that means anyone who can reach Open WebUI can chat and create API keys, there is no email-domain limit, email addresses are not verified, and team attribution by email can be claimed by anyone. Use it only on a network you trust, or put SSO in front instead.
+
+It does not install Docker, PowerShell, the NVIDIA toolkit, or Ollama; a failed check prints what to install for that operating system. `provision.sh` only needs PowerShell 7 (`pwsh`) to exist. CI runs the helpers and the host-check logic on Windows, macOS, and Linux (and under Windows PowerShell 5.1 on Windows, which has not been run locally); the full provisioning run was exercised on macOS only (see [docs/server-deployment-checklist.md](docs/server-deployment-checklist.md)).
+
+The manual steps below do the same thing one script at a time.
+
 ## First-time repository setup
 
 Clone the repository, create a private local environment file, and replace every `CHANGE_ME` value before starting the stack:
@@ -64,11 +84,11 @@ Copy-Item .env.example .env
 notepad .env
 ```
 
-On macOS or Linux, use `cp .env.example .env` and edit the file with your preferred editor. The `.env` file is intentionally excluded from Git because it contains credentials. Compose supplies the LiteLLM key to Prometheus as a runtime config without creating a tracked secret file. Docker named volumes hold runtime state and are also local to each Docker host.
+On macOS or Linux, use `cp .env.example .env` and edit the file with your preferred editor. For a new installation also set `WEBUI_ADMIN_EMAIL` and `WEBUI_ADMIN_PASSWORD` before the first start: Open WebUI then creates that administrator and closes sign-up, whereas otherwise the first person who opens it becomes the administrator. `DEFAULT_USER_ROLE=user` (the default) approves accounts created or signing in later at once; Open WebUI keeps the stored role after the first start, so change it later in Admin Panel -> Settings -> General. Before moving to a server, read [docs/server-deployment-checklist.md](docs/server-deployment-checklist.md). The `.env` file is intentionally excluded from Git because it contains credentials. Compose supplies the LiteLLM key to Prometheus as a runtime config without creating a tracked secret file. Docker named volumes hold runtime state and are also local to each Docker host.
 
-## Quick start: one command
+## Quick start: start the stack
 
-After installing the common prerequisites and creating `.env`, this single command starts the complete stack:
+After installing the common prerequisites and creating `.env`, this command starts the complete stack (`provision.ps1` runs it for you):
 
 ```powershell
 pwsh ./scripts/setup.ps1 -Profile auto -Pull
@@ -274,7 +294,7 @@ CPU inference is slower but requires no host GPU tooling. It is also the behavio
 | nginx proxy, Open WebUI (optional) | http://localhost:8480, or `http://<host-ip>:8480` when shared |
 | nginx proxy, LiteLLM API (optional) | http://localhost:8481/v1, or `http://<host-ip>:8481/v1` when shared |
 
-The nginx proxy exists only when `PROXY_ENABLED=true` in `.env` (see "Shared pilot access with the nginx proxy"). Every other address above binds to `127.0.0.1`.
+The nginx proxy exists only when `PROXY_ENABLED=true` in `.env` (see "Shared pilot access with the nginx proxy"). Every other address above binds to `127.0.0.1`; the proxy listens on `0.0.0.0` unless `PROXY_BIND_ADDRESS` says otherwise.
 
 Credentials are the private values you set in `.env` after copying `.env.example`:
 
@@ -322,7 +342,7 @@ Pilot users can create their own scoped LiteLLM key without leaving Open WebUI. 
 pwsh ./scripts/install-key-manager.ps1 -AdminEmail <admin email>
 ```
 
-The script prompts for the admin password (or reads `OPENWEBUI_ADMIN_PASSWORD`) and registers the model for every signed-in user; add `-GroupId <id>` to limit it to groups. Add `-PublicModels corp-general,corp-ocr` to make those models visible to every signed-in user (a model that already has an Open WebUI entry is skipped, so check its access in Admin → Settings → Models). Users select "API Key Manager" and type `models`, `new <model>` (optionally `new <model> as <label>`), `list`, `rotate <alias>`, `revoke <alias>`, or `help`. Each key works for one model, a user may create several keys for the same model (up to 20 in total by default), each key expires, is limited in rate and concurrency by the function's Valves, is shown only once, and is attributed to the LiteLLM team the user belongs to (add members by email in the LiteLLM UI). Teams are managed only in LiteLLM and are mirrored to Open WebUI groups automatically, or immediately when an administrator types `sync`. Users call LiteLLM directly, so a shared pilot should reach it only through the nginx proxy described below, which forwards just the inference paths. See [ADR 0004](docs/decisions/0004-self-service-virtual-keys.md) and [security guidance](docs/security.md).
+The script prompts for the admin password (or reads `OPENWEBUI_ADMIN_PASSWORD`) and registers the model for every signed-in user; add `-GroupId <id>` to limit it to groups. Add `-PublicModels corp-general,corp-ocr` (comma-separated is fine) to make those models visible to every signed-in user (a model that already has an Open WebUI entry is skipped, so check its access in Admin → Settings → Models). Users select "API Key Manager" and type `models`, `new <model>` (optionally `new <model> as <label>`), `list`, `rotate <alias>`, `revoke <alias>`, or `help`. Each key works for one model, a user may create several keys for the same model (up to 20 in total by default), each key expires, is limited in rate and concurrency by the function's Valves, is shown only once, and is attributed to the LiteLLM team the user belongs to (add members by email in the LiteLLM UI). Teams are managed only in LiteLLM and are mirrored to Open WebUI groups automatically, or immediately when an administrator types `sync`. Users call LiteLLM directly, so a shared pilot should reach it only through the nginx proxy described below, which forwards just the inference paths. See [ADR 0004](docs/decisions/0004-self-service-virtual-keys.md) and [security guidance](docs/security.md).
 
 ## Test the API key
 
@@ -433,7 +453,7 @@ Do not add `-v` unless you intentionally want to delete PostgreSQL, Grafana, Pro
 
 ## Shared pilot access with the nginx proxy
 
-By default every published port binds to `127.0.0.1`, so nobody else on the network can reach the stack. For a shared pilot, an optional nginx container (`docker-compose.proxy.yml`) is the single door:
+Every service port binds to `127.0.0.1`, so nobody else on the network can reach the stack directly. For a shared pilot, an optional nginx container (`docker-compose.proxy.yml`) is the single door:
 
 | Host port (default) | Goes to | What is reachable |
 |---|---|---|
@@ -444,10 +464,10 @@ It uses plain HTTP, so no certificate or DNS name is needed; users open `http://
 
 ```text
 PROXY_ENABLED=true
-PROXY_BIND_ADDRESS=127.0.0.1
+PROXY_BIND_ADDRESS=0.0.0.0
 ```
 
-`PROXY_BIND_ADDRESS` stays on `127.0.0.1` (this host only) until you set it to the host's LAN IP or `0.0.0.0` on purpose. Once `PROXY_ENABLED=true` is in `.env`, every script (`setup`, `verify-stack`, and so on) adds the overlay automatically, so a later run cannot remove the proxy as an orphan. Then run `pwsh ./scripts/setup.ps1 -Profile <profile>` and `pwsh ./scripts/verify-stack.ps1 -Profile <profile>`; the verifier creates a short-lived scoped key, chats through the API port, and checks that the administration paths return 404. Set the API Key Manager Valve `public_base_url` to `http://<host-ip>:8481/v1`.
+`PROXY_BIND_ADDRESS` defaults to `0.0.0.0`, so the proxy is reachable from every machine that can route to this host. Set it to the host's LAN IP to use one interface only, or to `127.0.0.1` to keep it on this host. Once `PROXY_ENABLED=true` is in `.env`, every script (`setup`, `verify-stack`, and so on) adds the overlay automatically, so a later run cannot remove the proxy as an orphan. Then run `pwsh ./scripts/setup.ps1 -Profile <profile>` and `pwsh ./scripts/verify-stack.ps1 -Profile <profile>`; the verifier creates a short-lived scoped key, chats through the API port, and checks that the administration paths return 404. Set the API Key Manager Valve `public_base_url` to `http://<host-ip>:8481/v1`.
 
 Limit who may connect with a git-ignored file in `nginx/local/`, for example `nginx/local/clients.conf`:
 
@@ -555,7 +575,7 @@ ollama list
 ollama ps
 ```
 
-All published Compose ports bind to `127.0.0.1` only, except the optional nginx proxy when you set `PROXY_BIND_ADDRESS` to another address on purpose. Do not expose this POC directly to the Internet; it intentionally omits TLS, SSO, network segmentation, HA, and enterprise secret management. The proxy speaks plain HTTP.
+All published Compose ports bind to `127.0.0.1` only, except the optional nginx proxy, which listens on `0.0.0.0` by default (change `PROXY_BIND_ADDRESS`). Do not expose this POC directly to the Internet; it intentionally omits TLS, SSO, network segmentation, HA, and enterprise secret management. The proxy speaks plain HTTP.
 
 If `PROXY_ENABLED=true` is in `.env`, manual `docker compose` commands need `-f docker-compose.proxy.yml` as well. If PowerShell calls to `localhost` fail with HTTP 500 or 503 while `curl` works, a system proxy agent is intercepting them; see `docs/troubleshooting.md`.
 

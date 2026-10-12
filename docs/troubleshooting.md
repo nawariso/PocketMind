@@ -122,6 +122,22 @@ The native Ollama process is not running. Start it with the context and keep-ali
 - **Title or follow-up errors in the Open WebUI log while using the Pipe:** expected on Open WebUI 0.11.4; those tasks do not run for a Pipe, which also keeps the key out of titles.
 - **A user is not in the expected team:** teams come from LiteLLM and match on the account email. Add the member by email in LiteLLM, then run `sync` as an administrator; existing keys keep their team until `rotate`.
 
+## `provision` or `configure-open-webui` stops with `429 API rate limit exceeded`
+
+Open WebUI limits sign-ins to 15 per 3 minutes per email. Wait three minutes without any sign-in attempt (each attempt renews the window) and run the script again; it is safe to repeat.
+
+## `provision` stops with "First administrator"
+
+`.env` exists but names no administrator, the proxy listens beyond this host, and no Open WebUI data exists yet, so the first visitor would become administrator. Set `WEBUI_ADMIN_EMAIL` and `WEBUI_ADMIN_PASSWORD` in `.env`, or set `PROXY_BIND_ADDRESS=127.0.0.1` until the account exists.
+
+## Image or model downloads fail on the server
+
+A pull that ends in `unexpected EOF`, or in a "denied" page from `pkg-containers.githubusercontent.com`, means a gateway or proxy on the network is blocking or cutting the download. The install needs `registry-1.docker.io`, `ghcr.io` with `pkg-containers.githubusercontent.com`, `docker.litellm.ai`, and `registry.ollama.ai`. Ask for them to be allowed, retry (layers already downloaded are kept), or pre-load images with `docker save` and `docker load`.
+
+## `-PublicModels a,b` registered one model named `a,b`
+
+Older versions of `install-key-manager.ps1` received a comma list as a single string. Current versions split it. Remove the bogus entry in Admin Panel → Settings → Models and run the installer again.
+
 ## Shared pilot proxy problems
 
 - **502 from the proxy right after recreating LiteLLM or Open WebUI:** the upstream is still starting. nginx finds the new container by itself (no reload) once it is healthy; wait for the health check.

@@ -59,6 +59,21 @@ pwsh ./scripts/model-lab.ps1 remove -Alias lab-<name> -Profile auto
 
 Use `-DeleteWeights` only after confirming no other lab alias uses the physical model. Model Lab refuses to delete production or shared weights.
 
+## First start of a new installation
+
+Run `./scripts/provision.sh --AdminEmail <email>` (Linux/macOS) or `pwsh ./scripts/provision.ps1 -AdminEmail <email>`. It checks the host (`-CheckOnly` stops there), creates `.env` with random secrets and the bootstrap administrator when none exists, runs `check-prerequisites.ps1`, `setup.ps1 -Pull`, `verify-stack.ps1`, `configure-open-webui.ps1`, and `install-key-manager.ps1` in that order, and stops at the first failure. Re-running it is safe: `.env` is kept and each step changes only what differs.
+
+The steps it performs, if you prefer to run them yourself:
+
+1. Put long random values in the private `.env`, including `WEBUI_ADMIN_EMAIL` and `WEBUI_ADMIN_PASSWORD` (see `.env.example`). Open WebUI creates that administrator on its first start and closes sign-up; without them the first visitor becomes administrator, so do not expose a new installation on a network before the account exists. `OPEN_WEBUI_IMAGE` is already pinned to the tested build and `DEFAULT_USER_ROLE=user` approves new accounts at once.
+2. `setup.ps1 -Pull`, then `verify-stack.ps1`.
+3. `configure-open-webui.ps1 -AdminEmail <email>` sets what Open WebUI keeps in its database: the role of new accounts, the Task Model (`corp-general`), access for the models users may see, and `corp-ocr` with Built-in Tools off. Then `install-key-manager.ps1 -AdminEmail <email> -PublicBaseUrl http://<host-ip>:8481/v1`.
+4. Create LiteLLM teams (members by email) if usage should be split by team, and confirm `curl -s http://localhost:3000/api/config` shows sign-up closed.
+
+To move Open WebUI to another build, pull it, run the tests and the API Key Manager checks, then change the digest in `.env.example` and the compose defaults together (`tests/config-contract.ps1` requires a digest, not a moving tag).
+
+The full list of what was verified and what was not is in the [server deployment checklist](server-deployment-checklist.md).
+
 ## Native Ollama on macOS
 
 The native profile uses an Ollama process on the host. `.env` values such as `OLLAMA_CONTEXT_LENGTH` do not reach it. Start it with the intended settings and keep it running:
@@ -131,7 +146,7 @@ The report reads measured token counts from LiteLLM's spend logs and prices the 
 
 Enable it by adding `PROXY_ENABLED=true` to the private `.env` (`PROXY_BIND_ADDRESS`, `PROXY_WEBUI_PORT`, `PROXY_API_PORT`, and `NGINX_IMAGE` are documented in `.env.example`), then run `setup.ps1` and `verify-stack.ps1` for the active profile. With the switch in `.env` every repository script includes `docker-compose.proxy.yml`; a manual `docker compose` call must list it too, otherwise `down` leaves the nginx container running and `up --remove-orphans` removes it.
 
-- **Share it on the network:** set `PROXY_BIND_ADDRESS` to the host's LAN IP (or `0.0.0.0`), run `setup.ps1`, and set the API Key Manager Valve `public_base_url` to `http://<host-ip>:<PROXY_API_PORT>/v1`. The proxy uses plain HTTP; read ADR 0005 first.
+- **Share it on the network:** the proxy listens on `0.0.0.0` by default; set `PROXY_BIND_ADDRESS` to the host's LAN IP to use one interface, or `127.0.0.1` to keep it local, run `setup.ps1`, and set the API Key Manager Valve `public_base_url` to `http://<host-ip>:<PROXY_API_PORT>/v1`. The proxy uses plain HTTP; read ADR 0005 first.
 - **Limit clients:** create `nginx/local/<name>.conf` with `allow <cidr>;` lines and `deny all;`, then `docker exec pocketmind-nginx nginx -s reload`. Check the client address in `docker logs pocketmind-nginx` first; Docker Desktop shows the VM gateway for everyone.
 - **Allow another LiteLLM endpoint:** edit the allow-list regex in `nginx/nginx.conf`, update `tests/proxy-contract.ps1`, run the contract, and restart nginx.
 - **Verify:** `verify-stack.ps1` creates a short-lived key limited to `corp-general`, lists models and chats through the API port, expects 404 for `/ui/`, `/openapi.json`, `/metrics/`, `/v1/model/info`, `/team/list`, `/key/generate`, and `/model/new`, and expects 401 without a key.

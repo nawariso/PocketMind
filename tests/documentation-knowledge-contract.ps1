@@ -22,7 +22,8 @@ $requiredDocs = @(
     'docs/decisions/0002-typhoon-for-ocr.md',
     'docs/decisions/0003-database-backed-model-lab.md',
     'docs/decisions/0004-self-service-virtual-keys.md',
-    'docs/decisions/0005-shared-pilot-nginx-proxy.md'
+    'docs/decisions/0005-shared-pilot-nginx-proxy.md',
+    'docs/server-deployment-checklist.md'
 )
 foreach ($relativePath in $requiredDocs) {
     $path = Join-Path $repoRoot $relativePath
@@ -96,7 +97,7 @@ if (Test-Path -LiteralPath (Join-Path $repoRoot 'docs/architecture.md')) {
 
 if (Test-Path -LiteralPath (Join-Path $repoRoot 'README.md')) {
     $readme = Get-Content -Raw -LiteralPath (Join-Path $repoRoot 'README.md')
-    foreach ($term in @('usage-report.ps1', 'install-key-manager.ps1', 'Task Model', 'OLLAMA_CONTEXT_LENGTH=8192', 'PROXY_ENABLED=true', 'nginx/local', 'Shared pilot access with the nginx proxy', 'http://localhost:8481/v1', 'docker-compose.proxy.yml')) {
+    foreach ($term in @('WEBUI_ADMIN_EMAIL', 'server-deployment-checklist.md', 'usage-report.ps1', 'install-key-manager.ps1', 'Task Model', 'OLLAMA_CONTEXT_LENGTH=8192', 'PROXY_ENABLED=true', 'nginx/local', 'Shared pilot access with the nginx proxy', 'http://localhost:8481/v1', 'docker-compose.proxy.yml', 'Provision a server with one command', 'provision.ps1', 'configure-open-webui.ps1', '-EnableSignup', 'Who may register')) {
         Assert-True -Condition ($readme.Contains($term)) -Message "README is missing: $term"
     }
 }

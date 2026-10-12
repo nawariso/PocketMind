@@ -11,7 +11,7 @@ All published ports bind to `127.0.0.1`, which is correct for one host but means
 Add an optional nginx service in `docker-compose.proxy.yml`, enabled by `PROXY_ENABLED=true` in `.env` and added to every compose call by the repository scripts so no later run removes it as an orphan. It works with all three profiles.
 
 - One port serves Open WebUI (including websockets); a second serves only the LiteLLM inference endpoints (`/v1/chat/completions`, `/v1/completions`, `/v1/embeddings`, `/v1/responses`, `/v1/models`). Anything else is a 404, and the path that matched is the path forwarded.
-- HTTP only, so no certificate is needed. The bind address defaults to `127.0.0.1`; exposing it to a network is a deliberate setting.
+- HTTP only, so no certificate is needed. The bind address defaults to `0.0.0.0` because sharing is the purpose of the proxy, and the proxy only runs when `PROXY_ENABLED=true`; `PROXY_BIND_ADDRESS` narrows it to one interface or to loopback.
 - Upstream names resolve at request time so recreated containers are found without a reload. Streaming is unbuffered, timeouts are 600 s, bodies up to 50 MB are accepted, the API port rate-limits each client address, and Open WebUI's sign-in/session endpoints are rate-limited (everything else it serves is not). Open WebUI's OpenAI passthrough stays off because that route would forward arbitrary paths to LiteLLM with the master key.
 - A git-ignored `nginx/local/*.conf` is included in both servers for local rules such as `allow`/`deny` client ranges.
 - The container runs with a read-only filesystem, all capabilities dropped except those nginx needs to change user, and `no-new-privileges`.

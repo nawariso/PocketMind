@@ -43,7 +43,7 @@ For a shared pilot on an internal network use the nginx proxy described below. Q
 The optional nginx proxy (ADR 0005) is the only component meant to listen beyond `127.0.0.1`:
 
 - it publishes Open WebUI and, on a second port, only the LiteLLM inference endpoints; the administration UI and APIs of LiteLLM, Grafana, Prometheus, PostgreSQL, and Ollama stay on loopback;
-- the bind address is `127.0.0.1` until `PROXY_BIND_ADDRESS` is set deliberately;
+- it listens on every interface (`0.0.0.0`) by default; set `PROXY_BIND_ADDRESS` to the LAN IP to use one interface, or `127.0.0.1` to keep it local, and enable it only on a host whose network you trust;
 - it speaks plain HTTP, so passwords and API keys are readable by anyone who can observe the network: use it only on a trusted internal network with test data, never on the internet, and add HTTPS before real use;
 - limit callers with `allow`/`deny` in `nginx/local/*.conf`, not with the host firewall: on Linux the ports Docker publishes can bypass `ufw`, and on Docker Desktop (observed on macOS) nginx sees every client as the VM gateway, so address rules and per-address rate limits cannot distinguish clients there;
 - the API port rate-limits requests per client address (30 per second, burst 60) and Open WebUI's sign-in/session endpoints are limited to 2 per second (burst 10) to slow password guessing and floods; keys themselves are long random values;
@@ -52,7 +52,8 @@ The optional nginx proxy (ADR 0005) is the only component meant to listen beyond
 
 ## Accounts and sign-up
 
-- Open WebUI sign-up is closed; administrators add accounts. Keep it closed unless account creation is otherwise controlled.
+- Open WebUI sign-up is closed; administrators add accounts. Keep it closed unless account creation is otherwise controlled. Check it with `curl -s http://localhost:3000/api/config` (`enable_signup` must be false) before sharing the server; the setting lives in Open WebUI's database and an administrator can turn it back on.
+- On a new installation the first visitor becomes administrator. Set `WEBUI_ADMIN_EMAIL` and `WEBUI_ADMIN_PASSWORD` in `.env` before the first start (the prerequisite check refuses short or placeholder passwords), or keep the proxy on `127.0.0.1` until the account exists.
 - Password sign-up checks only the email format. It cannot restrict email domains and does not verify that the person owns the address. Team attribution in the API Key Manager trusts the account email, so unverified sign-up would let someone claim another person's team by using their address.
 - Domain restriction exists for SSO (`OAUTH_ALLOWED_DOMAINS`) and, with an identity provider, also proves mailbox ownership. Use SSO before opening access to many users.
 - The default user role (`pending` unless changed) decides what a newly created or SSO account may do. Changing it to `user` removes the approval step, so combine it only with controlled account creation.
