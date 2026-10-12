@@ -1,0 +1,38 @@
+# Optional shared-pilot proxy. Enable it with PROXY_ENABLED=true in .env; every repository script then adds this
+# overlay to the active profile. It works with all three profiles:
+#   docker compose -f docker-compose.yml -f docker-compose.proxy.yml up -d
+#   docker compose -f docker-compose.native-ollama.yml -f docker-compose.proxy.yml up -d
+#
+# The proxy is the only service meant to be reachable from other machines. It binds to 127.0.0.1 by default;
+# set PROXY_BIND_ADDRESS (for example to the host's LAN IP, or 0.0.0.0) only when you intend that exposure.
+services:
+  nginx:
+    image: ${NGINX_IMAGE:-nginx:1.30-alpine}
+    container_name: pocketmind-nginx
+    restart: unless-stopped
+    ports:
+      - "${PROXY_BIND_ADDRESS:-127.0.0.1}:${PROXY_WEBUI_PORT:-8480}:8080"
+      - "${PROXY_BIND_ADDRESS:-127.0.0.1}:${PROXY_API_PORT:-8481}:8081"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/local:/etc/nginx/local:ro
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /var/cache/nginx:size=128m
+    cap_drop: [ALL]
+    cap_add: [CHOWN, SETGID, SETUID]
+    security_opt:
+      - no-new-privileges:true
+    depends_on:
+      open-webui:
+        condition: service_healthy
+      litellm:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8081/nginx-health >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+    networks: [ai-net]

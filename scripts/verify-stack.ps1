@@ -21,6 +21,7 @@ try {
         $requiredContainers = @('pocketmind-ollama') + $requiredContainers
     }
     if ($resolvedProfile -eq 'nvidia') { $requiredContainers = @('pocketmind-nvidia-exporter') + $requiredContainers }
+    if (Test-PocProxyEnabled) { $requiredContainers += 'pocketmind-nginx' }
     foreach ($container in $requiredContainers) {
         $state = Get-PocContainerState -ContainerName $container
         if ($null -eq $state -or $state.Status -ne 'running' -or ($state.Health -ne 'healthy' -and $state.Health -ne 'none')) {
@@ -140,6 +141,52 @@ try {
     }
     if ($resolvedProfile -eq 'nvidia' -and ($processorList -join "`n") -notmatch 'GPU') {
         throw 'Ollama does not report GPU placement after inference.'
+    }
+
+    if (Test-PocProxyEnabled) {
+        Write-Host '[check] Shared-pilot proxy'
+        $proxy = Get-PocProxySettings
+        $webUiBase = "http://$($proxy.ProbeHost):$($proxy.WebUiPort)"
+        $apiBase = "http://$($proxy.ProbeHost):$($proxy.ApiPort)"
+        Wait-PocHttp -Uri "$webUiBase/health" -TimeoutSeconds 60 | Out-Null
+
+        # A short-lived key limited to one model: the proxy check must not rely on the master key.
+        # A unique alias: LiteLLM keeps the alias of an expired key, and an interrupted run must not block the next one.
+        $proxyKeyAlias = 'poc-verify-proxy-' + [guid]::NewGuid().ToString('N').Substring(0, 8)
+        $proxyKeyBody = @{ key_alias = $proxyKeyAlias; duration = '10m'; models = @('corp-general') } | ConvertTo-Json
+        $proxyKey = (Invoke-RestMethod -Uri 'http://localhost:4000/key/generate' -Method Post -Headers (Get-PocBearerHeaders) `
+            -ContentType 'application/json' -Body $proxyKeyBody -TimeoutSec 30).key
+        try {
+            $scoped = @{ Authorization = "Bearer $proxyKey" }
+            $modelsViaProxy = Invoke-RestMethod -Uri "$apiBase/v1/models" -Headers $scoped -TimeoutSec 30
+            if (@($modelsViaProxy.data.id) -notcontains 'corp-general') { throw 'The proxy API port did not list corp-general.' }
+            $chatBody = @{ model = 'corp-general'; messages = @(@{ role = 'user'; content = 'Reply with exactly: PROXY_OK' }); max_tokens = 16; temperature = 0 } | ConvertTo-Json -Depth 6
+            $chat = Invoke-RestMethod -Uri "$apiBase/v1/chat/completions" -Method Post -Headers $scoped -ContentType 'application/json' -Body $chatBody -TimeoutSec 120
+            if ([string]$chat.choices[0].message.content -notmatch 'PROXY_OK') { throw 'Chat through the proxy API port did not return the expected text.' }
+
+            foreach ($denied in @(
+                @{ Method = 'GET'; Path = '/ui/' },
+                @{ Method = 'GET'; Path = '/openapi.json' },
+                @{ Method = 'GET'; Path = '/metrics/' },
+                @{ Method = 'GET'; Path = '/v1/model/info' },
+                @{ Method = 'GET'; Path = '/team/list' },
+                @{ Method = 'POST'; Path = '/key/generate' },
+                @{ Method = 'POST'; Path = '/model/new' }
+            )) {
+                $status = Invoke-PocHttpStatus -Uri "$apiBase$($denied.Path)" -Method $denied.Method -Headers $scoped
+                if ($status -ne 404) { throw "The proxy API port exposes $($denied.Method) $($denied.Path) (HTTP $status)." }
+            }
+            $noKeyStatus = Invoke-PocHttpStatus -Uri "$apiBase/v1/models"
+            if ($noKeyStatus -ne 401) { throw "The proxy API port answered HTTP $noKeyStatus without a key; expected 401." }
+        }
+        finally {
+            try {
+                Invoke-RestMethod -Uri 'http://localhost:4000/key/delete' -Method Post -Headers (Get-PocBearerHeaders) `
+                    -ContentType 'application/json' -Body (@{ key_aliases = @($proxyKeyAlias) } | ConvertTo-Json) -TimeoutSec 30 | Out-Null
+            }
+            catch { Write-Warning "Could not delete the temporary proxy test key '$proxyKeyAlias': $($_.Exception.Message)" }
+        }
+        Write-Host "[ok] Proxy: Open WebUI health, scoped-key chat, administration paths return 404 ($webUiBase, $apiBase)" -ForegroundColor Green
     }
 
     Write-Host '[ok] Open WebUI health' -ForegroundColor Green

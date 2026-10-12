@@ -11,6 +11,9 @@ Thumbs.db
 .idea/
 *.swp
 
+# Local nginx rules (for example client allow-lists)
+nginx/local/*.conf
+
 # Python bytecode
 __pycache__/
 *.pyc

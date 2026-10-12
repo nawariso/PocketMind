@@ -182,6 +182,40 @@ function Get-PocComposeFiles {
     }
 }
 
+function Test-PocProxyEnabled {
+    # The shared-pilot proxy is on when PROXY_ENABLED is true in the process environment (which overrides) or in .env.
+    # A missing .env means off, so CI and fresh clones are unaffected.
+    $value = $env:PROXY_ENABLED
+    if ([string]::IsNullOrWhiteSpace($value) -and (Test-Path -LiteralPath (Join-Path $script:PocRepoRoot '.env') -PathType Leaf)) {
+        $value = (Get-PocEnv)['PROXY_ENABLED']
+    }
+    return ([string]$value).Trim().ToLowerInvariant() -in @('true', '1', 'yes')
+}
+
+function Get-PocProxySettings {
+    $fileValues = @{}
+    if (Test-Path -LiteralPath (Join-Path $script:PocRepoRoot '.env') -PathType Leaf) { $fileValues = Get-PocEnv }
+    $read = {
+        param($name, $default)
+        $value = [Environment]::GetEnvironmentVariable($name)
+        if ([string]::IsNullOrWhiteSpace($value)) { $value = $fileValues[$name] }
+        if ([string]::IsNullOrWhiteSpace($value)) { $value = $default }
+        return [string]$value
+    }
+    $bind = & $read 'PROXY_BIND_ADDRESS' '127.0.0.1'
+    return [pscustomobject]@{
+        BindAddress = $bind
+        WebUiPort = [int](& $read 'PROXY_WEBUI_PORT' '8480')
+        ApiPort = [int](& $read 'PROXY_API_PORT' '8481')
+        # 0.0.0.0 listens everywhere, so the local host reaches it through loopback.
+        ProbeHost = $(if ($bind -eq '0.0.0.0') { '127.0.0.1' } else { $bind })
+    }
+}
+
+function Get-PocProxyComposeFile {
+    return Join-Path $script:PocRepoRoot 'docker-compose.proxy.yml'
+}
+
 function Invoke-PocCompose {
     param(
         [ValidateSet('cpu', 'native', 'nvidia')] [string] $Profile = 'cpu',
@@ -194,6 +228,8 @@ function Invoke-PocCompose {
     foreach ($composeFile in (Get-PocComposeFiles -Profile $Profile)) {
         $dockerArguments += @('-f', $composeFile)
     }
+    # One switch for every script: a later run without the overlay would otherwise remove the proxy as an orphan.
+    if (Test-PocProxyEnabled) { $dockerArguments += @('-f', (Get-PocProxyComposeFile)) }
     $dockerArguments += $Arguments
     & docker @dockerArguments
     if ($LASTEXITCODE -ne 0) {

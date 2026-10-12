@@ -48,6 +48,7 @@ try {
         $containers = @('pocketmind-ollama') + $containers
     }
     if ($resolvedProfile -eq 'nvidia') { $containers = @('pocketmind-nvidia-exporter') + $containers }
+    if (Test-PocProxyEnabled) { $containers += 'pocketmind-nginx' }
 
     foreach ($container in $containers) {
         Wait-PocContainerHealthy -ContainerName $container -TimeoutSeconds 360
@@ -58,6 +59,16 @@ try {
     Write-Host 'LiteLLM:    http://localhost:4000/ui/'
     Write-Host 'Prometheus: http://localhost:9090'
     Write-Host 'Grafana:    http://localhost:3001'
+    if (Test-PocProxyEnabled) {
+        $proxy = Get-PocProxySettings
+        Write-Host "Proxy:      Open WebUI http://$($proxy.BindAddress):$($proxy.WebUiPort)  API http://$($proxy.BindAddress):$($proxy.ApiPort)/v1"
+        if ($proxy.BindAddress -eq '127.0.0.1') {
+            Write-Host 'The proxy listens on this host only. Set PROXY_BIND_ADDRESS in .env to share it on your network.'
+        }
+        elseif ($proxy.BindAddress -eq '0.0.0.0') {
+            Write-Host 'The proxy listens on every interface: give users this host''s own IP address, not 0.0.0.0.'
+        }
+    }
 }
 catch {
     Write-Error "Setup failed: $($_.Exception.Message)"

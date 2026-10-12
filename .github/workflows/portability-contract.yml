@@ -42,3 +42,6 @@ jobs:
       - name: Configuration contract
         shell: pwsh
         run: ./tests/config-contract.ps1
+      - name: Proxy contract
+        shell: pwsh
+        run: ./tests/proxy-contract.ps1

@@ -13,11 +13,15 @@ $universalImages = @(
     'LITELLM_IMAGE',
     'OPEN_WEBUI_IMAGE',
     'PROMETHEUS_IMAGE',
-    'GRAFANA_IMAGE'
+    'GRAFANA_IMAGE',
+    'NGINX_IMAGE'
 )
+# Optional services fall back to the pinned default when .env predates them.
+$imageDefaults = @{ NGINX_IMAGE = 'nginx:1.30-alpine' }
 
 foreach ($variableName in $universalImages) {
     $imageReference = $envValues[$variableName]
+    if ([string]::IsNullOrWhiteSpace($imageReference) -and $imageDefaults.ContainsKey($variableName)) { $imageReference = $imageDefaults[$variableName] }
     if ([string]::IsNullOrWhiteSpace($imageReference)) {
         $failures.Add(".env is missing $variableName")
         continue
