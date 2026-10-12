@@ -5,12 +5,20 @@ param(
     [string[]] $GroupId = @(),
     # LiteLLM model aliases to make visible to every signed-in user. Open WebUI hides models from
     # non-admin users until they have an access grant. Models that already have an entry are left unchanged.
-    [string[]] $PublicModels = @()
+    [string[]] $PublicModels = @(),
+    # API address shown to users in the key example, for example http://10.1.2.3:8481/v1 (the API Key Manager Valve public_base_url).
+    [string] $PublicBaseUrl = '',
+    # With -PublicBaseUrl: leave the Valve alone when an administrator already set it to something other than the default.
+    [switch] $KeepCustomBaseUrl
 )
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 . (Join-Path $PSScriptRoot 'common.ps1')
+
+# `pwsh ./script.ps1 -PublicModels a,b` passes "a,b" as ONE string, so split comma lists ourselves.
+$GroupId = @($GroupId | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+$PublicModels = @($PublicModels | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
 
 # The admin password is read from OPENWEBUI_ADMIN_PASSWORD or prompted; it is never accepted as an argument.
 $password = $env:OPENWEBUI_ADMIN_PASSWORD
@@ -81,6 +89,22 @@ try {
         Write-Host 'Model already registered; existing access grants were left unchanged.'
     }
 
+    if (-not [string]::IsNullOrWhiteSpace($PublicBaseUrl)) {
+        # Read the saved valves first so every other setting is kept.
+        $valves = Invoke-RestMethod -Uri "$OpenWebUiUrl/api/v1/functions/id/$functionId/valves" -Headers $headers -TimeoutSec 30
+        if ($null -eq $valves) { $valves = [pscustomobject]@{} }
+        $currentBase = if ($null -ne $valves.PSObject.Properties['public_base_url']) { [string]$valves.public_base_url } else { '' }
+        if ($KeepCustomBaseUrl -and -not [string]::IsNullOrWhiteSpace($currentBase) -and $currentBase -ne 'http://localhost:4000/v1') {
+            Write-Host "Valve public_base_url is already $currentBase; it was kept."
+        }
+        else {
+            $valves | Add-Member -NotePropertyName public_base_url -NotePropertyValue $PublicBaseUrl.Trim() -Force
+            Invoke-RestMethod -Uri "$OpenWebUiUrl/api/v1/functions/id/$functionId/valves/update" -Method Post -Headers $headers `
+                -ContentType 'application/json' -Body ($valves | ConvertTo-Json -Depth 6) -TimeoutSec 30 | Out-Null
+            Write-Host "Valve public_base_url set to $($PublicBaseUrl.Trim())." -ForegroundColor Green
+        }
+    }
+
     foreach ($modelId in $PublicModels) {
         $entry = $null
         try { $entry = Invoke-RestMethod -Uri "$OpenWebUiUrl/api/v1/models/model?id=$([uri]::EscapeDataString($modelId))" -Headers $headers -TimeoutSec 30 }
@@ -105,7 +129,7 @@ try {
     Write-Host 'Select "API Key Manager" in the Open WebUI model picker and type "help".'
 }
 catch {
-    Write-Error "Installing API Key Manager failed: $($_.Exception.Message)"
+    Write-Error "Installing API Key Manager failed: $($_.Exception.Message) $($_.ErrorDetails.Message)"
     exit 1
 }
 finally {

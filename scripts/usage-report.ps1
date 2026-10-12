@@ -12,6 +12,9 @@ $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 . (Join-Path $PSScriptRoot 'common.ps1')
 
+# `pwsh ./script.ps1 -Compare a,b` passes "a,b" as one string, so split comma lists ourselves.
+$Compare = @($Compare | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+
 $envValues = @{}
 foreach ($line in Get-Content -LiteralPath (Join-Path $script:PocRepoRoot '.env')) {
     if ($line -match '^\s*([A-Z0-9_]+)=(.*)$') { $envValues[$matches[1]] = $matches[2] }

@@ -48,6 +48,10 @@ if (Test-Path -LiteralPath $installPath) {
     $install = Get-Content -Raw -LiteralPath $installPath
     Assert-True -Condition ($install -notmatch '\[string\]\s*\$(Admin)?Password') `
         -Message 'Installer must not accept the admin password as a parameter'
+    Assert-True -Condition ($install.Contains('$PublicModels = @($PublicModels | ForEach-Object { $_ -split '','' }')) `
+        -Message 'Installer must split comma-separated -PublicModels (pwsh -File passes them as one string)'
+    Assert-True -Condition ($install.Contains('$GroupId = @($GroupId | ForEach-Object { $_ -split '','' }')) `
+        -Message 'Installer must split comma-separated -GroupId'
     foreach ($term in @('OPENWEBUI_ADMIN_PASSWORD', '-AsSecureString', '/api/v1/functions/create', '/api/v1/models/create', 'access_grants', '$PublicModels')) {
         Assert-True -Condition ($install.Contains($term)) -Message "Installer is missing: $term"
     }
