@@ -54,6 +54,16 @@ try {
         Wait-PocContainerHealthy -ContainerName $container -TimeoutSeconds 360
     }
 
+    # Open WebUI reports onboarding while no administrator exists; whoever opens it first would become one.
+    if ((Test-PocProxyEnabled) -and (Get-PocProxySettings).BindAddress -ne '127.0.0.1') {
+        try {
+            $webUiConfig = Invoke-RestMethod -Uri 'http://127.0.0.1:3000/api/config' -TimeoutSec 10
+            if ($webUiConfig.onboarding -eq $true) {
+                Write-Warning 'Open WebUI has no administrator yet and the proxy listens beyond this host: the first visitor would become the administrator. Create the administrator account now, or set WEBUI_ADMIN_EMAIL and WEBUI_ADMIN_PASSWORD in .env before the first start.'
+            }
+        }
+        catch { }
+    }
     Write-Host "Local LLM stack is running with profile '$resolvedProfile'." -ForegroundColor Green
     Write-Host 'Open WebUI: http://localhost:3000'
     Write-Host 'LiteLLM:    http://localhost:4000/ui/'

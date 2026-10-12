@@ -64,9 +64,9 @@ if (Test-Path -LiteralPath $nginxPath) {
 # --- compose overlay: rendered with every profile
 # The project .env is read by `docker compose config` unless the process environment overrides it, so every
 # render pins the proxy settings; the defaults themselves are asserted from the overlay text below.
-$defaultProxyEnvironment = @{ PROXY_BIND_ADDRESS = '127.0.0.1'; PROXY_WEBUI_PORT = '8480'; PROXY_API_PORT = '8481' }
+$defaultProxyEnvironment = @{ PROXY_BIND_ADDRESS = '0.0.0.0'; PROXY_WEBUI_PORT = '8480'; PROXY_API_PORT = '8481' }
 $overlayText = Get-Content -Raw -LiteralPath (Join-Path $repoRoot 'docker-compose.proxy.yml')
-foreach ($term in @('${PROXY_BIND_ADDRESS:-127.0.0.1}', '${PROXY_WEBUI_PORT:-8480}', '${PROXY_API_PORT:-8481}')) {
+foreach ($term in @('${PROXY_BIND_ADDRESS:-0.0.0.0}', '${PROXY_WEBUI_PORT:-8480}', '${PROXY_API_PORT:-8481}')) {
     Assert-True -Condition $overlayText.Contains($term) -Message "docker-compose.proxy.yml must default to $term"
 }
 
@@ -100,8 +100,8 @@ foreach ($base in @(@('docker-compose.yml'), @('docker-compose.yml', 'docker-com
     $service = $nginxProperty.Value
 
     $published = @($service.ports | ForEach-Object { '{0}:{1}->{2}' -f $_.host_ip, $_.published, $_.target })
-    Assert-True -Condition (($published -join '|') -eq '127.0.0.1:8480->8080|127.0.0.1:8481->8081') `
-        -Message "$label must publish only 8080/8081 of the proxy, bound to 127.0.0.1 by default (got $($published -join ', '))"
+    Assert-True -Condition (($published -join '|') -eq '0.0.0.0:8480->8080|0.0.0.0:8481->8081') `
+        -Message "$label must publish only 8080/8081 of the proxy, listening on 0.0.0.0 by default (got $($published -join ', '))"
     Assert-True -Condition ($null -eq $without.services.PSObject.Properties['nginx']) -Message "$label base files must not define nginx"
     foreach ($other in $with.services.PSObject.Properties | Where-Object { $_.Name -ne 'nginx' }) {
         $beforeProperty = $without.services.PSObject.Properties[$other.Name]
@@ -113,6 +113,10 @@ foreach ($base in @(@('docker-compose.yml'), @('docker-compose.yml', 'docker-com
     $passthrough = $with.services.'open-webui'.environment.PSObject.Properties['ENABLE_OPENAI_API_PASSTHROUGH']
     Assert-True -Condition ($null -ne $passthrough -and [string]$passthrough.Value -eq 'false') `
         -Message "$label must keep ENABLE_OPENAI_API_PASSTHROUGH=false on Open WebUI"
+    foreach ($adminVariable in @('WEBUI_ADMIN_EMAIL', 'WEBUI_ADMIN_PASSWORD', 'WEBUI_ADMIN_NAME')) {
+        Assert-True -Condition ($null -ne $with.services.'open-webui'.environment.PSObject.Properties[$adminVariable]) `
+            -Message "$label must pass $adminVariable to Open WebUI (first-start administrator)"
+    }
     Assert-True -Condition ($service.read_only -eq $true) -Message "$label nginx must run with a read-only root filesystem"
     Assert-True -Condition (@($service.cap_drop) -contains 'ALL') -Message "$label nginx must drop all capabilities"
     Assert-True -Condition (@($service.security_opt) -contains 'no-new-privileges:true') -Message "$label nginx must set no-new-privileges"
@@ -124,11 +128,16 @@ foreach ($base in @(@('docker-compose.yml'), @('docker-compose.yml', 'docker-com
     }
 }
 
-# The bind address is a conscious choice: prove 0.0.0.0 is honoured without starting anything.
-$exposed = Get-RenderedCompose -ComposeFiles @('docker-compose.native-ollama.yml', 'docker-compose.proxy.yml') -Environment @{ PROXY_BIND_ADDRESS = '0.0.0.0'; PROXY_WEBUI_PORT = '9001'; PROXY_API_PORT = '9002' }
-if ($null -ne $exposed) {
-    $published = @($exposed.services.nginx.ports | ForEach-Object { '{0}:{1}' -f $_.host_ip, $_.published })
-    Assert-True -Condition (($published -join '|') -eq '0.0.0.0:9001|0.0.0.0:9002') -Message 'PROXY_BIND_ADDRESS and the proxy ports must be configurable'
+# The bind address and ports are configurable: prove a single interface and a loopback-only setup are honoured.
+$custom = Get-RenderedCompose -ComposeFiles @('docker-compose.native-ollama.yml', 'docker-compose.proxy.yml') -Environment @{ PROXY_BIND_ADDRESS = '10.1.2.3'; PROXY_WEBUI_PORT = '9001'; PROXY_API_PORT = '9002' }
+if ($null -ne $custom) {
+    $published = @($custom.services.nginx.ports | ForEach-Object { '{0}:{1}' -f $_.host_ip, $_.published })
+    Assert-True -Condition (($published -join '|') -eq '10.1.2.3:9001|10.1.2.3:9002') -Message 'PROXY_BIND_ADDRESS and the proxy ports must be configurable'
+}
+$local = Get-RenderedCompose -ComposeFiles @('docker-compose.native-ollama.yml', 'docker-compose.proxy.yml') -Environment @{ PROXY_BIND_ADDRESS = '127.0.0.1'; PROXY_WEBUI_PORT = '8480'; PROXY_API_PORT = '8481' }
+if ($null -ne $local) {
+    $published = @($local.services.nginx.ports | ForEach-Object { '{0}:{1}' -f $_.host_ip, $_.published })
+    Assert-True -Condition (($published -join '|') -eq '127.0.0.1:8480|127.0.0.1:8481') -Message 'PROXY_BIND_ADDRESS=127.0.0.1 must keep the proxy on this host'
 }
 
 # --- one switch for every script (a later run without the overlay would remove nginx as an orphan)
@@ -145,7 +154,7 @@ Assert-True -Condition ($commonScript.Contains("if (Test-PocProxyEnabled) { `$do
     -Message 'Invoke-PocCompose must add the proxy overlay whenever the proxy is enabled'
 
 $envExample = Get-Content -Raw -LiteralPath (Join-Path $repoRoot '.env.example')
-foreach ($term in @('PROXY_ENABLED=false', 'PROXY_BIND_ADDRESS=127.0.0.1', 'PROXY_WEBUI_PORT=8480', 'PROXY_API_PORT=8481', 'NGINX_IMAGE=nginx:1.30-alpine')) {
+foreach ($term in @('WEBUI_ADMIN_EMAIL=', 'WEBUI_ADMIN_PASSWORD=', 'PROXY_ENABLED=false', 'PROXY_BIND_ADDRESS=0.0.0.0', 'PROXY_WEBUI_PORT=8480', 'PROXY_API_PORT=8481', 'NGINX_IMAGE=nginx:1.30-alpine')) {
     Assert-True -Condition $envExample.Contains($term) -Message ".env.example is missing: $term"
 }
 $gitignore = Get-Content -Raw -LiteralPath (Join-Path $repoRoot '.gitignore')

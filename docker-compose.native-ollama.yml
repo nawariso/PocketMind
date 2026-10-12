@@ -49,7 +49,7 @@ services:
     networks: [ai-net]
 
   open-webui:
-    image: ${OPEN_WEBUI_IMAGE:-ghcr.io/open-webui/open-webui:main}
+    image: ${OPEN_WEBUI_IMAGE:-ghcr.io/open-webui/open-webui@sha256:8b432fe0a65b91116afc7961365c6cca5379cc923171386a96691f3471f3cae9}
     container_name: pocketmind-open-webui
     restart: unless-stopped
     ports:
@@ -61,6 +61,13 @@ services:
       OPENAI_API_KEY: ${LITELLM_MASTER_KEY}
       WEBUI_SECRET_KEY: ${WEBUI_SECRET_KEY}
       ENABLE_OPENAI_API_PASSTHROUGH: "false"
+      # Optional first-start administrator. Without it, the first person to open Open WebUI becomes administrator.
+      WEBUI_ADMIN_EMAIL: ${WEBUI_ADMIN_EMAIL:-}
+      WEBUI_ADMIN_PASSWORD: ${WEBUI_ADMIN_PASSWORD:-}
+      WEBUI_ADMIN_NAME: ${WEBUI_ADMIN_NAME:-Admin}
+      # Accounts created or signing in later are approved at once with the user role (applies to a new database;
+      # Open WebUI keeps the stored value afterwards, change it in Admin Panel -> Settings -> General).
+      DEFAULT_USER_ROLE: ${DEFAULT_USER_ROLE:-user}
     volumes:
       - openwebui_data:/app/backend/data
     depends_on:

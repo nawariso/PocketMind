@@ -365,6 +365,28 @@ function Test-OcrModelContract {
         -Message 'README must require Built-in Tools to be disabled for the OCR-only model'
 }
 
+function Test-OpenWebUiPinContract {
+    # The API Key Manager depends on Open WebUI internals, so a new server must get the tested build, not a moving tag.
+    $digestPattern = '^ghcr\.io/open-webui/open-webui@sha256:[0-9a-f]{64}$'
+    $envExample = Get-Content -Raw -LiteralPath (Join-Path $repoRoot '.env.example')
+    $pinned = [regex]::Match($envExample, '(?m)^OPEN_WEBUI_IMAGE=(.+)$')
+    Assert-True -Condition ($pinned.Success -and $pinned.Groups[1].Value.Trim() -match $digestPattern) `
+        -Message '.env.example must pin OPEN_WEBUI_IMAGE to a digest (ghcr.io/open-webui/open-webui@sha256:<64 hex>), not a moving tag'
+    foreach ($composeFile in @('docker-compose.yml', 'docker-compose.native-ollama.yml')) {
+        $compose = Get-Content -Raw -LiteralPath (Join-Path $repoRoot $composeFile)
+        $default = [regex]::Match($compose, '\$\{OPEN_WEBUI_IMAGE:-([^}]+)\}')
+        Assert-True -Condition ($default.Success -and $default.Groups[1].Value -match $digestPattern) `
+            -Message "$composeFile must default OPEN_WEBUI_IMAGE to a pinned digest"
+        if ($pinned.Success -and $default.Success) {
+            Assert-True -Condition ($default.Groups[1].Value -eq $pinned.Groups[1].Value.Trim()) `
+                -Message "$composeFile and .env.example must pin the same Open WebUI digest"
+        }
+        Assert-True -Condition ($compose.Contains('DEFAULT_USER_ROLE: ${DEFAULT_USER_ROLE:-user}')) `
+            -Message "$composeFile must default new accounts to the user role"
+    }
+    Assert-True -Condition ($envExample.Contains('DEFAULT_USER_ROLE=user')) -Message '.env.example must document DEFAULT_USER_ROLE=user'
+}
+
 function Test-SecretPlaceholderGuardContract {
     $commonScript = Get-Content -Raw -LiteralPath (Join-Path $repoRoot 'scripts/common.ps1')
     $prerequisiteScript = Get-Content -Raw -LiteralPath (Join-Path $repoRoot 'scripts/check-prerequisites.ps1')
@@ -392,6 +414,7 @@ try {
     Test-PrometheusTokenConfigContract
     Test-GeneralModelContract
     Test-OcrModelContract
+    Test-OpenWebUiPinContract
     Test-SecretPlaceholderGuardContract
 }
 finally {

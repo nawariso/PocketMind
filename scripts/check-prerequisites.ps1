@@ -13,6 +13,17 @@ try {
     $architecture = Get-PocArchitecture
     Assert-PocSecretsConfigured
 
+    # A bootstrap administrator must have a real password; otherwise Open WebUI would create it with a weak one.
+    $adminValues = Get-PocEnv
+    $adminEmail = [string]$adminValues['WEBUI_ADMIN_EMAIL']
+    $adminPassword = [string]$adminValues['WEBUI_ADMIN_PASSWORD']
+    if (-not [string]::IsNullOrWhiteSpace($adminEmail) -or -not [string]::IsNullOrWhiteSpace($adminPassword)) {
+        if ($adminEmail -notmatch '^[^@\s]+@[^@\s]+\.[^@\s]+$') { throw 'WEBUI_ADMIN_EMAIL must be a valid email address when WEBUI_ADMIN_PASSWORD is set.' }
+        if ($adminPassword.Length -lt 12 -or $adminPassword -match '^CHANGE_ME') {
+            throw 'WEBUI_ADMIN_PASSWORD must be a private value of at least 12 characters (not a CHANGE_ME placeholder).'
+        }
+    }
+
     Assert-PocCommand -Name 'docker'
     & docker version --format '{{.Server.Version}}' | Out-Null
     if ($LASTEXITCODE -ne 0) { throw 'Docker Desktop engine is not available.' }

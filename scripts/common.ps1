@@ -193,8 +193,10 @@ function Test-PocProxyEnabled {
 }
 
 function Get-PocProxySettings {
+    # Before the first provisioning there is no .env; the one that will be created starts from .env.example.
     $fileValues = @{}
     if (Test-Path -LiteralPath (Join-Path $script:PocRepoRoot '.env') -PathType Leaf) { $fileValues = Get-PocEnv }
+    elseif (Test-Path -LiteralPath (Join-Path $script:PocRepoRoot '.env.example') -PathType Leaf) { $fileValues = Get-PocEnv -Path (Join-Path $script:PocRepoRoot '.env.example') }
     $read = {
         param($name, $default)
         $value = [Environment]::GetEnvironmentVariable($name)
@@ -202,7 +204,7 @@ function Get-PocProxySettings {
         if ([string]::IsNullOrWhiteSpace($value)) { $value = $default }
         return [string]$value
     }
-    $bind = & $read 'PROXY_BIND_ADDRESS' '127.0.0.1'
+    $bind = & $read 'PROXY_BIND_ADDRESS' '0.0.0.0'
     return [pscustomobject]@{
         BindAddress = $bind
         WebUiPort = [int](& $read 'PROXY_WEBUI_PORT' '8480')
