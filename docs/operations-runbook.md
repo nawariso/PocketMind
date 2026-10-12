@@ -8,7 +8,7 @@ Use the root README for first-time setup. Use this runbook for a system that has
 pwsh ./scripts/setup.ps1 -Profile auto
 ```
 
-Add `-Pull` only when images or configured production model weights must be downloaded:
+With `PROXY_ENABLED=true` in `.env` the same command also starts and waits for the nginx proxy. Add `-Pull` only when images or configured production model weights must be downloaded:
 
 ```powershell
 pwsh ./scripts/setup.ps1 -Profile auto -Pull
@@ -20,7 +20,7 @@ pwsh ./scripts/setup.ps1 -Profile auto -Pull
 pwsh ./scripts/verify-stack.ps1 -Profile auto
 ```
 
-The verifier checks container health, PostgreSQL authentication, `corp-general` inference, invalid-key rejection, service UIs, Prometheus targets/metrics, Grafana provisioning, configured model presence, and GPU placement for the NVIDIA profile.
+The verifier checks container health, PostgreSQL authentication, `corp-general` inference, invalid-key rejection, service UIs, Prometheus targets/metrics, Grafana provisioning, configured model presence, and GPU placement for the NVIDIA profile. When `PROXY_ENABLED=true` it also checks the nginx container and exercises the proxy with a short-lived scoped key (see "Shared pilot proxy"). All repository scripts bypass the system proxy for their local calls, so an agent that intercepts loopback traffic does not break them.
 
 ## Service status
 
@@ -28,7 +28,7 @@ The verifier checks container health, PostgreSQL authentication, `corp-general` 
 docker ps --filter name=pocketmind-
 ```
 
-For profile-aware Compose rendering or lifecycle operations, prefer the repository scripts. The effective NVIDIA files are `docker-compose.yml` plus `docker-compose.nvidia.yml`; native uses `docker-compose.native-ollama.yml`.
+The list includes `pocketmind-nginx` only when the proxy is enabled. For profile-aware Compose rendering or lifecycle operations, prefer the repository scripts. The effective NVIDIA files are `docker-compose.yml` plus `docker-compose.nvidia.yml`; native uses `docker-compose.native-ollama.yml`.
 
 ## Model inventory and placement
 
@@ -116,7 +116,7 @@ Operations:
 - Teams are managed only in LiteLLM (add members by email). `sync` as an administrator mirrors teams to Open WebUI groups and lists keys whose owner left the team; those users run `rotate <alias>`.
 - Deleting a LiteLLM team deletes its keys, including the `unassigned` team that holds keys of users in no team.
 - After every Open WebUI upgrade, create a key in a test chat and confirm it does not appear in the chat title, tags, or follow-ups.
-- Users call LiteLLM directly. Before anyone off this host uses a key, publish only `/v1/*` through a TLS proxy and never `/ui`, `/key`, or `/model`.
+- Users call LiteLLM directly. Other machines reach it only through the nginx proxy (next section), which forwards just the inference paths and never `/ui`, `/key`, or `/model`; plain HTTP is for trusted internal networks until HTTPS is added.
 
 ## Usage and cost comparison
 
@@ -126,6 +126,17 @@ pwsh ./scripts/usage-report.ps1 -Days 30 -HardwareCost <usd> -LifetimeMonths 36 
 ```
 
 The report reads measured token counts from LiteLLM's spend logs and prices the same tokens with commercial prices from LiteLLM's bundled table. Local models have no price, so LiteLLM's own cost views show zero; local cost is computed only from the hardware and power values you supply. Treat the result as a cost comparison, not a quality or latency comparison, and check commercial prices against the provider before deciding.
+
+## Shared pilot proxy (nginx)
+
+Enable it by adding `PROXY_ENABLED=true` to the private `.env` (`PROXY_BIND_ADDRESS`, `PROXY_WEBUI_PORT`, `PROXY_API_PORT`, and `NGINX_IMAGE` are documented in `.env.example`), then run `setup.ps1` and `verify-stack.ps1` for the active profile. With the switch in `.env` every repository script includes `docker-compose.proxy.yml`; a manual `docker compose` call must list it too, otherwise `down` leaves the nginx container running and `up --remove-orphans` removes it.
+
+- **Share it on the network:** set `PROXY_BIND_ADDRESS` to the host's LAN IP (or `0.0.0.0`), run `setup.ps1`, and set the API Key Manager Valve `public_base_url` to `http://<host-ip>:<PROXY_API_PORT>/v1`. The proxy uses plain HTTP; read ADR 0005 first.
+- **Limit clients:** create `nginx/local/<name>.conf` with `allow <cidr>;` lines and `deny all;`, then `docker exec pocketmind-nginx nginx -s reload`. Check the client address in `docker logs pocketmind-nginx` first; Docker Desktop shows the VM gateway for everyone.
+- **Allow another LiteLLM endpoint:** edit the allow-list regex in `nginx/nginx.conf`, update `tests/proxy-contract.ps1`, run the contract, and restart nginx.
+- **Verify:** `verify-stack.ps1` creates a short-lived key limited to `corp-general`, lists models and chats through the API port, expects 404 for `/ui/`, `/openapi.json`, `/metrics/`, `/v1/model/info`, `/team/list`, `/key/generate`, and `/model/new`, and expects 401 without a key.
+- **Logs:** `docker logs pocketmind-nginx` (standard access log; request headers such as keys are not logged).
+- **Stop only the proxy:** remove `PROXY_ENABLED=true` and run `setup.ps1` again, or `docker compose <profile files> -f docker-compose.proxy.yml rm -sf nginx`.
 
 ## Focused restarts
 
@@ -187,6 +198,7 @@ Follow the Quick Tunnel section in the root README. Confirm the tunnel targets O
 8. Keep a recent PostgreSQL/Open WebUI backup before upgrades.
 9. On macOS, confirm native Ollama and `node_exporter` are running and `ollama ps` shows context 8192.
 10. After an Open WebUI upgrade, repeat the API Key Manager title/follow-up check.
+11. If the proxy is enabled, run `verify-stack.ps1` and look at the client addresses in the nginx log.
 
 ## Rollback principles
 
@@ -199,7 +211,7 @@ Follow the Quick Tunnel section in the root README. Confirm the tunnel targets O
 
 If public exposure, credential leakage, runaway memory use, or unsafe behavior is suspected:
 
-1. Stop/remove the Quick Tunnel first.
+1. Stop/remove the Quick Tunnel first, and take the shared proxy offline (set `PROXY_ENABLED=false` or `PROXY_BIND_ADDRESS=127.0.0.1` in `.env` and run `setup.ps1`, or `docker rm -f pocketmind-nginx` for an immediate stop). The proxy is the only service listening beyond `127.0.0.1`.
 2. Stop request-generating clients.
 3. Stop the affected service or the stack with the correct Compose profile.
 4. Preserve logs and database/UI backups before destructive cleanup.

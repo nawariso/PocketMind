@@ -7,8 +7,8 @@ This directory separates current operational knowledge from historical implement
 Use these documents for the running system:
 
 - [Architecture](architecture.md) — components, request paths, profiles, persistence, and trust boundaries.
-- [Operations runbook](operations-runbook.md) — startup, verification, model lifecycle, diagnostics, and emergency procedures.
-- [Security](security.md) — credentials, localhost-only policy, access control, tunnels, and incident response.
+- [Operations runbook](operations-runbook.md) — startup, verification, model lifecycle, native macOS Ollama and host monitoring, master-key rotation, API Key Manager, shared pilot proxy, usage reports, diagnostics, and emergency procedures.
+- [Security](security.md) — credentials, localhost-only policy, the shared pilot proxy, accounts and sign-up, API keys, tunnels, and incident response.
 - [Backup and restore](backup-and-restore.md) — what state matters and how to preserve or restore it.
 - [Troubleshooting](troubleshooting.md) — symptom-oriented diagnosis and recovery.
 
@@ -26,6 +26,7 @@ Architecture decision records explain choices that should survive implementation
 - [0002 — Typhoon for OCR](decisions/0002-typhoon-for-ocr.md)
 - [0003 — Database-backed Model Lab](decisions/0003-database-backed-model-lab.md)
 - [0004 — Self-service virtual keys through Open WebUI](decisions/0004-self-service-virtual-keys.md)
+- [0005 — Shared pilot access through an nginx HTTP proxy](decisions/0005-shared-pilot-nginx-proxy.md)
 
 ## Historical implementation plans
 

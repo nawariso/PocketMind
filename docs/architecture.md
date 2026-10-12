@@ -21,9 +21,12 @@ flowchart LR
     WebUI --> KeyManager[API Key Manager Pipe]
     KeyManager -->|create, list, revoke keys; read teams| LiteLLM
     ApiClient[User's API client] -->|personal virtual key| LiteLLM
+    RemoteUser[Other machines] -.->|optional, HTTP| Nginx[nginx proxy]
+    Nginx -->|all paths| WebUI
+    Nginx -->|only /v1 inference paths| LiteLLM
 ```
 
-The NVIDIA exporter exists only in the `nvidia` profile and `node_exporter` only in the `native` profile. The API Key Manager runs inside Open WebUI; users call LiteLLM directly with the key it issues.
+The nginx proxy is optional (`PROXY_ENABLED=true`) and is the only service meant to be reachable from other machines; see ADR 0005. The NVIDIA exporter exists only in the `nvidia` profile and `node_exporter` only in the `native` profile. The API Key Manager runs inside Open WebUI; users call LiteLLM directly with the key it issues.
 
 Open WebUI has direct Ollama access disabled. It uses LiteLLM as its OpenAI-compatible backend. LiteLLM owns stable routing aliases and sends requests to Ollama.
 
@@ -68,6 +71,7 @@ The container Ollama runtime limits loaded models and parallel inference to one 
 - The API Key Manager Pipe runs server-side in Open WebUI and reads the LiteLLM master key from the container environment to create keys. Only administrators can install or edit it. It takes the user's identity from Open WebUI's `__user__` value, ignores calls made for titles/tags/follow-ups, and can touch only keys whose `user_id` is the caller's.
 - Issued keys are LiteLLM virtual keys limited to one model each, with a mandatory expiry and rate/concurrency limits. They call LiteLLM directly, so any network exposure of LiteLLM must forward only `/v1/*`.
 - LiteLLM teams are the single place where teams are managed. A user's team is found by matching the account email against team members; teams are mirrored one way to Open WebUI groups. Deleting a team deletes its keys.
+- The optional nginx proxy (HTTP only) exposes Open WebUI and only the LiteLLM inference paths. Administration paths of LiteLLM are 404 through it, its bind address defaults to `127.0.0.1`, and local allow/deny rules live in the git-ignored `nginx/local/`. It adds no state to back up.
 - Quick Tunnel is a temporary exception to localhost-only access and should expose only Open WebUI unless a separate, explicitly controlled API test is required.
 
 ## Monitoring
@@ -83,3 +87,4 @@ LiteLLM records tokens per request, key, user, and team. Local models have no pr
 - PostgreSQL failure affects LiteLLM readiness and dynamic model/key state.
 - Open WebUI failure affects browser access but not direct local LiteLLM API testing.
 - Monitoring failure does not stop inference but removes operational visibility.
+- nginx failure removes shared access from other machines only; local use at `localhost:3000` and `localhost:4000` is unaffected. nginx resolves upstream names at request time, so a recreated LiteLLM or Open WebUI is found again without reloading it.

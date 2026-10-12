@@ -11,6 +11,8 @@ docker exec pocketmind-ollama ollama list
 docker exec pocketmind-ollama ollama ps
 ```
 
+If other machines cannot reach the stack, check that the proxy is enabled (`PROXY_ENABLED=true` in `.env`), that `pocketmind-nginx` is healthy, and which address `PROXY_BIND_ADDRESS` binds; see "Shared pilot proxy problems" below.
+
 Then inspect timestamp-matched logs:
 
 ```powershell
@@ -119,6 +121,22 @@ The native Ollama process is not running. Start it with the context and keep-ali
 - **A key returns 401 after a team was deleted:** deleting a LiteLLM team deletes every key attributed to it. Ask the user to run `new <model>` again.
 - **Title or follow-up errors in the Open WebUI log while using the Pipe:** expected on Open WebUI 0.11.4; those tasks do not run for a Pipe, which also keeps the key out of titles.
 - **A user is not in the expected team:** teams come from LiteLLM and match on the account email. Add the member by email in LiteLLM, then run `sync` as an administrator; existing keys keep their team until `rotate`.
+
+## Shared pilot proxy problems
+
+- **502 from the proxy right after recreating LiteLLM or Open WebUI:** the upstream is still starting. nginx finds the new container by itself (no reload) once it is healthy; wait for the health check.
+- **403 from the proxy:** a rule in `nginx/local/*.conf` does not allow the client address. Check the address in `docker logs pocketmind-nginx`; on Docker Desktop every client appears as the VM gateway.
+- **429:** on the API port the per-address limit of 30 requests per second (burst 60) was exceeded; on Open WebUI, sign-in and session calls are limited to 2 per second (burst 10).
+- **413:** the request body is over 50 MB.
+- **404 for an API path users need:** the API port forwards only the inference endpoints listed in `nginx/nginx.conf`.
+- **`GET /v1/models/<id>` returns 401 for a scoped key:** LiteLLM answers the same way when called directly; list models with `/v1/models`.
+- **Port already in use (8480 or 8481):** another program owns it; change `PROXY_WEBUI_PORT` or `PROXY_API_PORT` in `.env`.
+- **A browser on `http://<ip>:8480` cannot use the Clipboard API:** browsers allow it only on HTTPS or localhost. Open WebUI's Copy button still works (it falls back to the older copy mechanism); this was observed as a `copy` event, not by reading the clipboard.
+- **Proxy still running after setting `PROXY_ENABLED` off:** run `setup.ps1` (it removes the orphan) or `docker rm -f pocketmind-nginx`.
+
+## PowerShell scripts get HTTP 500 from `localhost` while `curl` works
+
+A system proxy or proxy auto-config agent (for example a corporate secure web gateway) can intercept PowerShell's requests to loopback addresses and answer 500 or 503; `curl` ignores it. `scripts/common.ps1` now disables the system proxy for every repository script, which fixed `verify-stack.ps1` on a machine where this happened. For your own commands use `curl` or `Invoke-WebRequest -NoProxy` (present in PowerShell 7.6, the version tested; check older 7.x releases with `Get-Help Invoke-WebRequest -Parameter NoProxy`). A browser can hit the same agent when the host name is not `localhost` or an IP address; start it without proxy settings for testing.
 
 ## NVIDIA profile does not use GPU
 

@@ -29,7 +29,7 @@ The prerequisite check rejects only `CHANGE_ME` placeholders. It accepts a weak 
 
 ## Public exposure
 
-Quick Tunnel is temporary test access, not production ingress:
+For a shared pilot on an internal network use the nginx proxy described below. Quick Tunnel is temporary test access, not production ingress:
 
 - expose Open WebUI only by default;
 - require authenticated accounts and disable public signup after account provisioning;
@@ -37,6 +37,18 @@ Quick Tunnel is temporary test access, not production ingress:
 - do not expose LiteLLM API unless a separate test specifically requires it;
 - for API testing, use a short-lived scoped Virtual Key, never the master key;
 - use restart policy `no`, record the current temporary URL, then remove the tunnel and revoke test keys.
+
+## Shared pilot proxy
+
+The optional nginx proxy (ADR 0005) is the only component meant to listen beyond `127.0.0.1`:
+
+- it publishes Open WebUI and, on a second port, only the LiteLLM inference endpoints; the administration UI and APIs of LiteLLM, Grafana, Prometheus, PostgreSQL, and Ollama stay on loopback;
+- the bind address is `127.0.0.1` until `PROXY_BIND_ADDRESS` is set deliberately;
+- it speaks plain HTTP, so passwords and API keys are readable by anyone who can observe the network: use it only on a trusted internal network with test data, never on the internet, and add HTTPS before real use;
+- limit callers with `allow`/`deny` in `nginx/local/*.conf`, not with the host firewall: on Linux the ports Docker publishes can bypass `ufw`, and on Docker Desktop (observed on macOS) nginx sees every client as the VM gateway, so address rules and per-address rate limits cannot distinguish clients there;
+- the API port rate-limits requests per client address (30 per second, burst 60) and Open WebUI's sign-in/session endpoints are limited to 2 per second (burst 10) to slow password guessing and floods; keys themselves are long random values;
+- Open WebUI holds the LiteLLM master key and would forward arbitrary paths upstream with it if its OpenAI passthrough were on, so `ENABLE_OPENAI_API_PASSTHROUGH` is pinned to `false` in the compose files and asserted by `tests/proxy-contract.ps1`. Through the Open WebUI port a signed-in user then gets 403 for `/openai/key/generate`, `/openai/key/list`, `/openai/model/new`, `/openai/team/list`, and `/openai/openapi.json` (tested with a throwaway non-admin account). Open WebUI's own OpenAI-compatible chat routes (`/openai/chat/completions`, `/api/chat/completions`) stay available to signed-in users with their session token, within the models they may see; those calls reach LiteLLM with Open WebUI's key, so a personal key's rate and concurrency limits do not apply to them;
+- keep sign-up closed and use strong secrets in `.env`, because the master key is the only protection of everything the proxy does not expose.
 
 ## Accounts and sign-up
 
@@ -61,8 +73,9 @@ Pilot users create their own LiteLLM key from the Open WebUI model "API Key Mana
 - keys are scoped to an explicit model list, expire, and have rate and concurrency limits set by the administrator;
 - the full key is shown once in the user's chat history, so users should delete that chat after copying it;
 - after every Open WebUI upgrade, create a key in a test chat and confirm the key does not appear in the chat title, tags, or follow-ups, because those tasks receive the reply text;
-- expose only `/v1/*` of LiteLLM through a TLS proxy; never publish `/ui`, `/key`, or `/model`;
+- reach LiteLLM from other machines only through the nginx proxy (ADR 0005), which forwards just the inference paths; never publish `/ui`, `/key`, or `/model`, and add HTTPS before real use;
 - never use a weak master key; the Pipe reads it from the Open WebUI container environment;
+- publish API keys' endpoint through the nginx proxy (ADR 0005), which forwards only `/v1` inference paths;
 - keys are limited to one model each and attributed to the LiteLLM team the user belongs to (matched by email); manage teams only in LiteLLM, they are mirrored to Open WebUI groups by `sync` and never the other way;
 - if you set the default user role to `user` so people are not left `pending`, keep sign-up closed or limited to a trusted identity provider, because every approved user can chat and create keys;
 - deleting a LiteLLM team also deletes every key attributed to it, so move or recreate keys before removing a team (`unassigned` included);

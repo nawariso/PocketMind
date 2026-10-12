@@ -21,7 +21,8 @@ $requiredDocs = @(
     'docs/decisions/0001-stable-model-aliases.md',
     'docs/decisions/0002-typhoon-for-ocr.md',
     'docs/decisions/0003-database-backed-model-lab.md',
-    'docs/decisions/0004-self-service-virtual-keys.md'
+    'docs/decisions/0004-self-service-virtual-keys.md',
+    'docs/decisions/0005-shared-pilot-nginx-proxy.md'
 )
 foreach ($relativePath in $requiredDocs) {
     $path = Join-Path $repoRoot $relativePath
@@ -61,7 +62,9 @@ if (Test-Path -LiteralPath (Join-Path $repoRoot 'docs/operations-runbook.md')) {
         'Rotate the LiteLLM master key',
         'Task Model',
         'install-key-manager.ps1',
-        'usage-report.ps1'
+        'usage-report.ps1',
+        'PROXY_ENABLED=true',
+        'nginx/local'
     )) {
         Assert-True -Condition ($runbook.Contains($term)) -Message "Operations runbook is missing: $term"
     }
@@ -76,7 +79,9 @@ if (Test-Path -LiteralPath (Join-Path $repoRoot 'docs/troubleshooting.md')) {
         'continuous-YlOrRd',
         'Host dashboard has no data',
         'host.docker.internal:11434',
-        'API Key Manager problems'
+        'API Key Manager problems',
+        'Shared pilot proxy problems',
+        'PowerShell scripts get HTTP 500'
     )) {
         Assert-True -Condition ($troubleshooting.Contains($term)) -Message "Troubleshooting guide is missing: $term"
     }
@@ -91,7 +96,7 @@ if (Test-Path -LiteralPath (Join-Path $repoRoot 'docs/architecture.md')) {
 
 if (Test-Path -LiteralPath (Join-Path $repoRoot 'README.md')) {
     $readme = Get-Content -Raw -LiteralPath (Join-Path $repoRoot 'README.md')
-    foreach ($term in @('usage-report.ps1', 'install-key-manager.ps1', 'Task Model', 'OLLAMA_CONTEXT_LENGTH=8192')) {
+    foreach ($term in @('usage-report.ps1', 'install-key-manager.ps1', 'Task Model', 'OLLAMA_CONTEXT_LENGTH=8192', 'PROXY_ENABLED=true', 'nginx/local', 'Shared pilot access with the nginx proxy', 'http://localhost:8481/v1', 'docker-compose.proxy.yml')) {
         Assert-True -Condition ($readme.Contains($term)) -Message "README is missing: $term"
     }
 }
@@ -111,7 +116,7 @@ if (Test-Path -LiteralPath (Join-Path $repoRoot 'docs/models/catalog.md')) {
 
 if (Test-Path -LiteralPath (Join-Path $repoRoot 'docs/security.md')) {
     $security = Get-Content -Raw -LiteralPath (Join-Path $repoRoot 'docs/security.md')
-    foreach ($term in @('localhost-only', 'LITELLM_MASTER_KEY', 'Virtual Key', 'Quick Tunnel', 'Model Lab', 'OAUTH_ALLOWED_DOMAINS', 'does not verify')) {
+    foreach ($term in @('localhost-only', 'LITELLM_MASTER_KEY', 'Virtual Key', 'Quick Tunnel', 'Model Lab', 'OAUTH_ALLOWED_DOMAINS', 'does not verify', 'plain HTTP', 'nginx/local')) {
         Assert-True -Condition ($security.Contains($term)) -Message "Security document is missing: $term"
     }
 }

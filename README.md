@@ -13,6 +13,9 @@ flowchart LR
     LiteLLM -->|application metrics| Prometheus["Prometheus<br/>localhost:9090"]
     NvidiaExporter["NVIDIA exporter<br/>nvidia profile only"] -->|GPU metrics| Prometheus
     Prometheus --> Grafana["Grafana<br/>localhost:3001"]
+    RemoteUsers["Other machines<br/>(optional)"] -.->|HTTP, only if the proxy is enabled| Nginx["nginx proxy<br/>8480 / 8481"]
+    Nginx -->|Open WebUI| WebUI
+    Nginx -->|only /v1 inference paths| LiteLLM
 ```
 
 The default text model is `corp-general` (`qwen3:4b-instruct-2507-q4_K_M`). It is a text-only Qwen 3 4B Instruct Q4 model selected for stronger Thai, reasoning, coding, and tool calling than the previous Llama 3.2 3B while remaining practical on a 4 GB laptop GPU through partial CPU/RAM offload. The stack also installs `corp-ocr` (`scb10x/typhoon-ocr1.5-3b`), the Typhoon-recommended Ollama build for Thai and English document OCR.
@@ -268,6 +271,10 @@ CPU inference is slower but requires no host GPU tooling. It is also the behavio
 | Prometheus | http://localhost:9090 |
 | Grafana | http://localhost:3001 |
 | PostgreSQL | `127.0.0.1:5432` |
+| nginx proxy, Open WebUI (optional) | http://localhost:8480, or `http://<host-ip>:8480` when shared |
+| nginx proxy, LiteLLM API (optional) | http://localhost:8481/v1, or `http://<host-ip>:8481/v1` when shared |
+
+The nginx proxy exists only when `PROXY_ENABLED=true` in `.env` (see "Shared pilot access with the nginx proxy"). Every other address above binds to `127.0.0.1`.
 
 Credentials are the private values you set in `.env` after copying `.env.example`:
 
@@ -315,7 +322,7 @@ Pilot users can create their own scoped LiteLLM key without leaving Open WebUI. 
 pwsh ./scripts/install-key-manager.ps1 -AdminEmail <admin email>
 ```
 
-The script prompts for the admin password (or reads `OPENWEBUI_ADMIN_PASSWORD`) and registers the model for every signed-in user; add `-GroupId <id>` to limit it to groups. Add `-PublicModels corp-general,corp-ocr` to make those models visible to every signed-in user (a model that already has an Open WebUI entry is skipped, so check its access in Admin → Settings → Models). Users select "API Key Manager" and type `models`, `new <model>` (optionally `new <model> as <label>`), `list`, `rotate <alias>`, `revoke <alias>`, or `help`. Each key works for one model, a user may create several keys for the same model (up to 20 in total by default), each key expires, is limited in rate and concurrency by the function's Valves, is shown only once, and is attributed to the LiteLLM team the user belongs to (add members by email in the LiteLLM UI). Teams are managed only in LiteLLM and are mirrored to Open WebUI groups automatically, or immediately when an administrator types `sync`. Users call LiteLLM directly, so a shared pilot must publish only `/v1/*` through a TLS proxy. See [ADR 0004](docs/decisions/0004-self-service-virtual-keys.md) and [security guidance](docs/security.md).
+The script prompts for the admin password (or reads `OPENWEBUI_ADMIN_PASSWORD`) and registers the model for every signed-in user; add `-GroupId <id>` to limit it to groups. Add `-PublicModels corp-general,corp-ocr` to make those models visible to every signed-in user (a model that already has an Open WebUI entry is skipped, so check its access in Admin → Settings → Models). Users select "API Key Manager" and type `models`, `new <model>` (optionally `new <model> as <label>`), `list`, `rotate <alias>`, `revoke <alias>`, or `help`. Each key works for one model, a user may create several keys for the same model (up to 20 in total by default), each key expires, is limited in rate and concurrency by the function's Valves, is shown only once, and is attributed to the LiteLLM team the user belongs to (add members by email in the LiteLLM UI). Teams are managed only in LiteLLM and are mirrored to Open WebUI groups automatically, or immediately when an administrator types `sync`. Users call LiteLLM directly, so a shared pilot should reach it only through the nginx proxy described below, which forwards just the inference paths. See [ADR 0004](docs/decisions/0004-self-service-virtual-keys.md) and [security guidance](docs/security.md).
 
 ## Test the API key
 
@@ -424,6 +431,37 @@ docker compose -f docker-compose.native-ollama.yml down
 
 Do not add `-v` unless you intentionally want to delete PostgreSQL, Grafana, Prometheus, Open WebUI, and container Ollama volumes.
 
+## Shared pilot access with the nginx proxy
+
+By default every published port binds to `127.0.0.1`, so nobody else on the network can reach the stack. For a shared pilot, an optional nginx container (`docker-compose.proxy.yml`) is the single door:
+
+| Host port (default) | Goes to | What is reachable |
+|---|---|---|
+| `8480` | Open WebUI | everything Open WebUI serves, including websockets |
+| `8481` | LiteLLM | only `/v1/chat/completions`, `/v1/completions`, `/v1/embeddings`, `/v1/responses`, and `/v1/models`; every other path (`/ui`, `/key`, `/model`, `/team`, `/user`, `/openapi.json`, `/metrics`) is a 404 |
+
+It uses plain HTTP, so no certificate or DNS name is needed; users open `http://<host-ip>:8480` and call `http://<host-ip>:8481/v1`. Enable it in the private `.env`:
+
+```text
+PROXY_ENABLED=true
+PROXY_BIND_ADDRESS=127.0.0.1
+```
+
+`PROXY_BIND_ADDRESS` stays on `127.0.0.1` (this host only) until you set it to the host's LAN IP or `0.0.0.0` on purpose. Once `PROXY_ENABLED=true` is in `.env`, every script (`setup`, `verify-stack`, and so on) adds the overlay automatically, so a later run cannot remove the proxy as an orphan. Then run `pwsh ./scripts/setup.ps1 -Profile <profile>` and `pwsh ./scripts/verify-stack.ps1 -Profile <profile>`; the verifier creates a short-lived scoped key, chats through the API port, and checks that the administration paths return 404. Set the API Key Manager Valve `public_base_url` to `http://<host-ip>:8481/v1`.
+
+Limit who may connect with a git-ignored file in `nginx/local/`, for example `nginx/local/clients.conf`:
+
+```text
+allow 10.0.0.0/8;
+deny all;
+```
+
+Apply it with `docker exec pocketmind-nginx nginx -s reload`. Do not rely on the host firewall for this: on Linux, ports published by Docker Engine are typically handled by Docker's own iptables rules and can bypass `ufw`; check on the shared host. On Docker Desktop (observed on macOS) nginx sees every client as the VM gateway address, so address rules and per-address rate limits are meaningless there; look at the client address in `docker logs pocketmind-nginx` on the shared host before trusting them.
+
+The API port limits each client address to 30 requests per second (burst 60), Open WebUI's sign-in and session endpoints to 2 per second (burst 10) to slow password guessing, and the proxy accepts bodies up to 50 MB, enough for base64 OCR images. Browsers may call the API cross-origin (OPTIONS preflight is allowed). Traffic is not encrypted: passwords and API keys can be read on the network, so use it only on a trusted internal network with test data, never on the internet, and move to HTTPS before real use. Use strong secrets in `.env`, keep sign-up closed, and see ADR 0005 and the security guidance.
+
+When the proxy is enabled, include the overlay in manual commands, for example `docker compose -f docker-compose.native-ollama.yml -f docker-compose.proxy.yml down`.
+
 ## Temporary public test with Cloudflare Quick Tunnel
 
 Use a [Cloudflare Quick Tunnel](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/do-more-with-tunnels/trycloudflare/) to test Open WebUI from another network without buying a public IP, forwarding router ports, or changing PocketMind's localhost-only port bindings. Quick Tunnels are temporary, have no uptime guarantee, and are not suitable for production.
@@ -517,11 +555,15 @@ ollama list
 ollama ps
 ```
 
-All published Compose ports bind to `127.0.0.1` only. Do not expose this POC directly to the Internet; it intentionally omits TLS, SSO, network segmentation, HA, and enterprise secret management.
+All published Compose ports bind to `127.0.0.1` only, except the optional nginx proxy when you set `PROXY_BIND_ADDRESS` to another address on purpose. Do not expose this POC directly to the Internet; it intentionally omits TLS, SSO, network segmentation, HA, and enterprise secret management. The proxy speaks plain HTTP.
+
+If `PROXY_ENABLED=true` is in `.env`, manual `docker compose` commands need `-f docker-compose.proxy.yml` as well. If PowerShell calls to `localhost` fail with HTTP 500 or 503 while `curl` works, a system proxy agent is intercepting them; see `docs/troubleshooting.md`.
 
 ## Validation scope
 
 The repository contains static contracts for Windows, macOS, Linux, amd64, arm64, all Compose profiles, dashboards, and script portability. A platform is described as runtime-verified only after the full verifier runs on physical hardware or an appropriate self-hosted runner. CI configuration rendering does not certify GPU acceleration.
+
+The nginx proxy was exercised on one host (Docker Desktop on macOS, native profile), including binding to `0.0.0.0` and reaching it through the host's own LAN address. It was not tested from another machine, on Linux or Windows, or with the `cpu` and `nvidia` profiles beyond configuration rendering in `tests/proxy-contract.ps1`.
 
 Run the network-dependent multi-architecture image check before changing pinned image digests:
 

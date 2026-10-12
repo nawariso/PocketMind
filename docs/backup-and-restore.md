@@ -13,6 +13,7 @@ Back up unique state; re-pull rebuildable artifacts. Test restoration before rel
 | Grafana local state | Optional | Provisioned assets are in Git; back up if local edits exist |
 | Prometheus history | Optional | Rebuildable; retain only if history is required |
 | Source/config | Critical | Git remote plus verified commit |
+| Local nginx rules (`nginx/local/*.conf`, git-ignored) | Important if used | Copy with the private `.env`; the proxy itself holds no other state |
 
 Create backups outside the repository so they cannot be committed accidentally.
 

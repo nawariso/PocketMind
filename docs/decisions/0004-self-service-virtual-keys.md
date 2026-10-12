@@ -21,3 +21,5 @@ Open WebUI hides models from non-admin users until an access grant exists, and n
 ## Consequences
 
 LiteLLM Logs and Usage identify each request by key alias and user ID. Cost views stay at zero until real prices exist. Keys do not follow later `lab-*` models automatically; add them to the Valve and rotate keys. Deleting a LiteLLM team deletes its keys (observed when a team created for a test was removed), and `sync` moves keys of users in no group into `unassigned`, so removing that team revokes them.
+
+Users call LiteLLM directly with their key, so other machines reach it through the nginx proxy of ADR 0005, which forwards only the `/v1` inference paths and never `/ui`, `/key`, or `/model`.
