@@ -4,9 +4,9 @@ param(
     # Role of accounts created or signing in later. `user` approves them at once; `pending` needs an administrator.
     [ValidateSet('user', 'pending')] [string] $DefaultUserRole = 'user',
     # Model that writes chat titles, tags, and follow-up suggestions (the OCR model cannot).
-    [string] $TaskModel = 'corp-general',
+    [string] $TaskModel = 'default-general',
     # LiteLLM aliases made visible to every signed-in user. Open WebUI hides models from normal users until an entry exists.
-    [string[]] $PublicModels = @('corp-general', 'corp-ocr'),
+    [string[]] $PublicModels = @('default-general', 'default-ocr'),
     # Open sign-up to everyone who can reach Open WebUI. Off by default; see the warning printed when it is on.
     [switch] $EnableSignup
 )
@@ -75,12 +75,12 @@ try {
     }
     else { Write-Host "Task model is already '$TaskModel'." }
 
-    # 3. Models visible to normal users. corp-ocr is vision-only and cannot take tool definitions.
+    # 3. Models visible to normal users. default-ocr is vision-only and cannot take tool definitions.
     foreach ($modelId in $PublicModels) {
         $entry = $null
         try { $entry = Invoke-OpenWebUi -Path "/api/v1/models/model?id=$([uri]::EscapeDataString($modelId))" }
         catch { }
-        $capabilities = if ($modelId -eq 'corp-ocr') { [pscustomobject]@{ vision = $true; builtin_tools = $false } } else { $null }
+        $capabilities = if ($modelId -eq 'default-ocr') { [pscustomobject]@{ vision = $true; builtin_tools = $false } } else { $null }
         if ($null -eq $entry) {
             $body = @{
                 id = $modelId; name = $modelId; base_model_id = $null
@@ -93,7 +93,7 @@ try {
             Write-Host "Model $modelId made visible to every signed-in user." -ForegroundColor Green
             continue
         }
-        if ($modelId -eq 'corp-ocr') {
+        if ($modelId -eq 'default-ocr') {
             $current = $null
             if ($null -ne $entry.meta.capabilities -and $null -ne $entry.meta.capabilities.PSObject.Properties['builtin_tools']) {
                 $current = $entry.meta.capabilities.builtin_tools
@@ -109,9 +109,9 @@ try {
                     is_active = $entry.is_active
                 }
                 Invoke-OpenWebUi -Method Post -Path '/api/v1/models/model/update' -Body $body | Out-Null
-                Write-Host 'Model corp-ocr: Built-in Tools turned off (it does not support tools).' -ForegroundColor Green
+                Write-Host 'Model default-ocr: Built-in Tools turned off (it does not support tools).' -ForegroundColor Green
             }
-            else { Write-Host 'Model corp-ocr already has Built-in Tools off.' }
+            else { Write-Host 'Model default-ocr already has Built-in Tools off.' }
         }
         else { Write-Host "Model $modelId already has an Open WebUI entry; its access was left unchanged." }
     }

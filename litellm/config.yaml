@@ -1,10 +1,10 @@
 model_list:
-  - model_name: corp-general
+  - model_name: default-general
     litellm_params:
       model: ollama_chat/qwen3:4b-instruct-2507-q4_K_M
       api_base: os.environ/OLLAMA_API_BASE
 
-  - model_name: corp-ocr
+  - model_name: default-ocr
     litellm_params:
       model: ollama_chat/scb10x/typhoon-ocr1.5-3b
       api_base: os.environ/OLLAMA_API_BASE

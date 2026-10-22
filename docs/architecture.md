@@ -34,10 +34,10 @@ Open WebUI has direct Ollama access disabled. It uses LiteLLM as its OpenAI-comp
 
 Version-controlled aliases in `litellm/config.yaml` are production contracts:
 
-- `corp-general` → `qwen3:4b-instruct-2507-q4_K_M`
-- `corp-ocr` → `scb10x/typhoon-ocr1.5-3b`
+- `default-general` → `qwen3:4b-instruct-2507-q4_K_M`
+- `default-ocr` → `scb10x/typhoon-ocr1.5-3b`
 
-Model Lab creates `lab-*` aliases through LiteLLM's model-management API. Those aliases are stored in PostgreSQL and persist across LiteLLM restarts, but they do not modify production config. Promotion from `lab-*` to a production alias is a separate reviewed config change.
+Model Lab creates custom aliases through LiteLLM's model-management API. Those aliases are stored in PostgreSQL and persist across LiteLLM restarts, but they do not modify production config. Promotion from a custom alias to a configured default alias is a separate reviewed config change.
 
 ## Profiles
 
@@ -65,8 +65,8 @@ The container Ollama runtime limits loaded models and parallel inference to one 
 ## Trust boundaries
 
 - Open WebUI authenticates human users and applies workspace model grants.
-- LiteLLM master-key access is administrative; it can manage models and bypass Model Lab's client-side namespace guard.
-- `corp-ocr` is an OCR-only model. Open WebUI metadata must retain `vision=true` and `builtin_tools=false` because the Typhoon Ollama build does not support tools.
+- LiteLLM master-key access is administrative; it can manage models and bypass Model Lab's client-side alias and deletion guards.
+- `default-ocr` is an OCR-only model. Open WebUI metadata must retain `vision=true` and `builtin_tools=false` because the Typhoon Ollama build does not support tools.
 - Model Lab aliases are admin-visible in Open WebUI; ordinary users require a Workspace Model and explicit read grant.
 - The API Key Manager Pipe runs server-side in Open WebUI and reads the LiteLLM master key from the container environment to create keys. Only administrators can install or edit it. It takes the user's identity from Open WebUI's `__user__` value, ignores calls made for titles/tags/follow-ups, and can touch only keys whose `user_id` is the caller's.
 - Issued keys are LiteLLM virtual keys limited to one model each, with a mandatory expiry and rate/concurrency limits. They call LiteLLM directly, so any network exposure of LiteLLM must forward only `/v1/*`.

@@ -28,7 +28,7 @@ Settle these before you run anything; most are hard to change after users arrive
 | Ollama | Only on macOS: install it and run it with `OLLAMA_CONTEXT_LENGTH=8192 OLLAMA_KEEP_ALIVE=10m ollama serve`. Windows and Linux run Ollama in a container. |
 | NVIDIA | For the `nvidia` profile: driver plus NVIDIA Container Toolkit, so a container can use the GPU. |
 | Memory | At least 8 GiB available to Docker; 16 GiB or more is recommended. |
-| Disk | About 15 GiB for images and models; keep 25 GiB free. Models are about 2.5 GB (`corp-general`) and 3.2 GB (`corp-ocr`). |
+| Disk | About 15 GiB for images and models; keep 25 GiB free. Models are about 2.5 GB (`default-general`) and 3.2 GB (`default-ocr`). |
 | Network (outbound) | `registry-1.docker.io`, `ghcr.io` together with `pkg-containers.githubusercontent.com`, `docker.litellm.ai`, and `registry.ollama.ai`. A gateway that blocks these makes pulls fail (`unexpected EOF`, or a "denied" page). |
 | Network (inbound) | Users reach two ports: Open WebUI (default 8480) and the API (default 8481). Nothing else needs to be open. |
 
@@ -60,7 +60,7 @@ The order, and what each step does:
 3. **`check-prerequisites.ps1`** for the chosen profile.
 4. **`setup.ps1 -Pull`**: downloads images and models, starts the services, waits until they are healthy.
 5. **`verify-stack.ps1`**: inference, monitoring, and the proxy.
-6. **`configure-open-webui.ps1`**: new accounts get the `user` role and are approved at once, the Task Model is `corp-general`, `corp-general` and `corp-ocr` are visible to signed-in users (`corp-ocr` with Built-in Tools off).
+6. **`configure-open-webui.ps1`**: new accounts get the `user` role and are approved at once, the Task Model is `default-general`, `default-general` and `default-ocr` are visible to signed-in users (`default-ocr` with Built-in Tools off).
 7. **`install-key-manager.ps1`**: the "API Key Manager" model, with the API address set for users.
 
 It stops at the first failure and is safe to run again: `.env` and data are kept, and each step changes only what differs.
@@ -109,17 +109,17 @@ Run these on the server. Replace `<ip>` with the address users will use.
 Then test as a normal person, not as the administrator (an administrator bypasses access control and proves nothing):
 
 1. As the administrator, add a test user: Admin Panel → Users → +, role `user`.
-2. Sign in as that user in a private window. The model list shows `corp-general`, `corp-ocr`, and "API Key Manager".
-3. Chat with `corp-general`; send a document image to `corp-ocr` with the prompt from the README.
-4. Select "API Key Manager", type `models`, then `new corp-general`. Copy the key and call the API from another machine:
+2. Sign in as that user in a private window. The model list shows `default-general`, `default-ocr`, and "API Key Manager".
+3. Chat with `default-general`; send a document image to `default-ocr` with the prompt from the README.
+4. Select "API Key Manager", type `models`, then `new default-general`. Copy the key and call the API from another machine:
 
    ```text
    curl http://<ip>:8481/v1/chat/completions \
      -H "Authorization: Bearer <key>" -H "Content-Type: application/json" \
-     -d '{"model":"corp-general","messages":[{"role":"user","content":"Reply with exactly: API_OK"}],"max_tokens":16}'
+     -d '{"model":"default-general","messages":[{"role":"user","content":"Reply with exactly: API_OK"}],"max_tokens":16}'
    ```
 
-   The same key on `corp-ocr` must give 403 (a key works for one model).
+   The same key on `default-ocr` must give 403 (a key works for one model).
 5. Delete the test user, and their chat, afterwards.
 
 Testing from a second device matters: every check made while building this ran on the host itself.

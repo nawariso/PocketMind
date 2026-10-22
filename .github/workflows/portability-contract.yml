@@ -5,6 +5,18 @@ on:
   pull_request:
 
 jobs:
+  key-manager-behavior:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install function dependency
+        run: python -m pip install 'pydantic>=2,<3'
+      - name: API Key Manager behavior
+        run: python -m unittest discover -s tests -p 'test_key_manager_behavior.py' -v
+
   powershell-contracts:
     strategy:
       fail-fast: false
@@ -22,6 +34,12 @@ jobs:
       - name: API Key Manager contract
         shell: pwsh
         run: ./tests/key-manager-contract.ps1
+      - name: Model alias contract
+        shell: pwsh
+        run: ./tests/model-lab-contract.ps1
+      - name: Model alias behavior
+        shell: pwsh
+        run: ./tests/model-lab-behavior.ps1
       - name: Provisioning contract
         shell: pwsh
         run: ./tests/provision-contract.ps1

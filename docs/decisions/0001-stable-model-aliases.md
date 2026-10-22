@@ -10,9 +10,9 @@ Physical Ollama tags change as models are evaluated or replaced. Open WebUI, API
 
 Expose workload-oriented stable aliases through LiteLLM:
 
-- `corp-general` for general text/reasoning/coding/tools;
-- `corp-ocr` for document OCR;
-- `lab-*` for experiments only.
+- `default-general` for general text/reasoning/coding/tools;
+- `default-ocr` for document OCR;
+- Custom model aliases with no required prefix; new aliases live in LiteLLM's database.
 
 Physical model changes occur behind the stable production aliases after benchmark, contracts, runtime verification, review, and rollback preparation.
 

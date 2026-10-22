@@ -32,7 +32,7 @@ Likely causes: stale browser session/cache, user role is pending, model inactive
 
 ## Regular user does not see a Model Lab alias
 
-This is expected. Admins see the DB-backed base alias; regular users need an administrator-created Workspace Model using the `lab-*` base and an explicit read grant.
+This is expected. Admins see the DB-backed base alias; regular users need an administrator-created Workspace Model using the custom model base and an explicit read grant.
 
 ## Typhoon reports `does not support tools`
 
@@ -40,7 +40,7 @@ Cause: a request included tool definitions, but `scb10x/typhoon-ocr1.5-3b` suppo
 
 Resolution:
 
-- keep `corp-ocr` metadata at `vision=true` and `builtin_tools=false`;
+- keep `default-ocr` metadata at `vision=true` and `builtin_tools=false`;
 - disable attached/global tools for that OCR chat;
 - start a new chat and retry;
 - verify a no-tools image request independently.
@@ -61,7 +61,7 @@ Image tokens, system prompt, history, and tool schemas count toward context. The
 
 ## OCR output is wrong or incomplete
 
-- Confirm `corp-ocr`, not `corp-general`, is selected.
+- Confirm `default-ocr`, not `default-general`, is selected.
 - Use the documented Typhoon extraction prompt and temperature 0.1.
 - Attach one clear document image.
 - Keep Built-in Tools off.
@@ -83,9 +83,9 @@ Partial CPU/GPU placement is expected on 4 GB VRAM. Compare cold and warm runs, 
 
 ## Follow-up suggestions appear one character per line
 
-Cause: Open WebUI had no Task Model, so follow-up, title, and tag generation used the model of the current chat. `corp-ocr` is an OCR model and cannot follow general instructions; it returned one string where Open WebUI expects a list, so each character became its own suggestion. Chats made before the fix stored `followUps` as a string; chats made after it stored a list of 4–5 questions.
+Cause: Open WebUI had no Task Model, so follow-up, title, and tag generation used the model of the current chat. `default-ocr` is an OCR model and cannot follow general instructions; it returned one string where Open WebUI expects a list, so each character became its own suggestion. Chats made before the fix stored `followUps` as a string; chats made after it stored a list of 4–5 questions.
 
-Fix: Admin Panel → Settings → Interface → Task Model → External Models → `corp-general`, or turn off Follow Up Generation. The task model is loaded in addition to the chat model, which costs memory on a small host. The change affects new messages only.
+Fix: Admin Panel → Settings → Interface → Task Model → External Models → `default-general`, or turn off Follow Up Generation. The task model is loaded in addition to the chat model, which costs memory on a small host. The change affects new messages only.
 
 ## Open WebUI shows no models, or LiteLLM logs `Invalid proxy server token`, after changing `LITELLM_MASTER_KEY`
 
@@ -116,7 +116,7 @@ The native Ollama process is not running. Start it with the context and keep-ali
 
 ## API Key Manager problems
 
-- **Users do not see "API Key Manager" or `corp-general`:** Open WebUI hides models from non-admin users until an access grant exists. Re-run `scripts/install-key-manager.ps1` with `-PublicModels`, and check each model's access in Admin Panel → Settings → Models.
+- **Users do not see "API Key Manager" or `default-general`:** Open WebUI hides models from non-admin users until an access grant exists. Re-run `scripts/install-key-manager.ps1` with `-PublicModels`, and check each model's access in Admin Panel → Settings → Models.
 - **"Please wait N seconds":** the per-user cooldown on create, rotate, and revoke; wait and retry.
 - **A key returns 401 after a team was deleted:** deleting a LiteLLM team deletes every key attributed to it. Ask the user to run `new <model>` again.
 - **Title or follow-up errors in the Open WebUI log while using the Pipe:** expected on Open WebUI 0.11.4; those tasks do not run for a Pipe, which also keeps the key out of titles.
@@ -175,7 +175,7 @@ A system proxy or proxy auto-config agent (for example a corporate secure web ga
 
 ```powershell
 pwsh ./scripts/model-lab.ps1 list -Profile auto
-pwsh ./scripts/model-lab.ps1 remove -Alias lab-<name> -Profile auto
+pwsh ./scripts/model-lab.ps1 remove -Alias <name> -Profile auto
 ```
 
 The add flow attempts rollback if discovery verification fails, but always run `list` after an interrupted operation. Do not use production aliases for experiments.
@@ -186,7 +186,7 @@ The text test timeout is 300 seconds. Inspect model loading and memory placement
 
 ## Removing a lab alias does not free disk
 
-Default `remove` preserves Ollama weights. Use `-DeleteWeights` only when the model is not production and no other lab alias shares it. Confirm with `ollama list` and `docker system df`.
+Default `remove` preserves Ollama weights. Use `-DeleteWeights` only when the model is not production and no other alias shares it. Confirm with `ollama list` and `docker system df`.
 
 ## Quick Tunnel URL fails
 

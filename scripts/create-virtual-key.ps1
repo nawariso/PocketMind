@@ -11,7 +11,7 @@ try {
     $body = @{
         key_alias = $Alias
         duration = $Duration
-        models = @('corp-general')
+        models = @('default-general')
         metadata = @{ purpose = 'pocketmind' }
     } | ConvertTo-Json -Depth 8
     $result = Invoke-RestMethod -Uri 'http://localhost:4000/key/generate' -Method Post `
@@ -19,7 +19,7 @@ try {
     if ([string]::IsNullOrWhiteSpace([string]$result.key)) {
         throw 'LiteLLM did not return a virtual key.'
     }
-    Write-Host "Virtual key created for corp-general (alias=$Alias, duration=$Duration):" -ForegroundColor Green
+    Write-Host "Virtual key created for default-general (alias=$Alias, duration=$Duration):" -ForegroundColor Green
     Write-Output $result.key
 }
 catch {

@@ -15,13 +15,15 @@ if (Test-Path -LiteralPath $scriptPath) {
     $scriptContent = Get-Content -Raw -LiteralPath $scriptPath
     foreach ($term in @(
         "ValidateSet('add', 'list', 'test', 'remove')",
-        "'lab-'",
+        'No prefix is required.',
+        'Get-AllModelDeployments',
+        'Assert-AliasAvailable',
         '/model/new',
         '/model/delete',
         "@('pull', `$Model)",
         "@('show', `$Model)",
-        "'corp-general'",
-        "'corp-ocr'"
+        "'default-general'",
+        "'default-ocr'"
     )) {
         Assert-True -Condition ($scriptContent.Contains($term)) -Message "Model Lab script is missing safety/behavior term: $term"
     }
@@ -49,7 +51,7 @@ foreach ($term in @(
     'warm-up',
     'text chat only',
     'powershell -ExecutionPolicy Bypass -File .\scripts\model-lab.ps1',
-    'lab-'
+    'No prefix is required'
 )) {
     Assert-True -Condition ($readme.Contains($term)) -Message "README is missing Model Lab guidance: $term"
 }

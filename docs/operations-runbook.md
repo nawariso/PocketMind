@@ -20,7 +20,7 @@ pwsh ./scripts/setup.ps1 -Profile auto -Pull
 pwsh ./scripts/verify-stack.ps1 -Profile auto
 ```
 
-The verifier checks container health, PostgreSQL authentication, `corp-general` inference, invalid-key rejection, service UIs, Prometheus targets/metrics, Grafana provisioning, configured model presence, and GPU placement for the NVIDIA profile. When `PROXY_ENABLED=true` it also checks the nginx container and exercises the proxy with a short-lived scoped key (see "Shared pilot proxy"). All repository scripts bypass the system proxy for their local calls, so an agent that intercepts loopback traffic does not break them.
+The verifier checks container health, PostgreSQL authentication, `default-general` inference, invalid-key rejection, service UIs, Prometheus targets/metrics, Grafana provisioning, configured model presence, and GPU placement for the NVIDIA profile. When `PROXY_ENABLED=true` it also checks the nginx container and exercises the proxy with a short-lived scoped key (see "Shared pilot proxy"). All repository scripts bypass the system proxy for their local calls, so an agent that intercepts loopback traffic does not break them.
 
 ## Service status
 
@@ -51,13 +51,13 @@ ollama ps
 ## Model Lab lifecycle
 
 ```powershell
-pwsh ./scripts/model-lab.ps1 add -Model <exact-tag> -Alias lab-<name> -Profile auto
+pwsh ./scripts/model-lab.ps1 add -Model <exact-tag> -Alias <name> -Profile auto
 pwsh ./scripts/model-lab.ps1 list -Profile auto
-pwsh ./scripts/model-lab.ps1 test -Alias lab-<name> -Profile auto
-pwsh ./scripts/model-lab.ps1 remove -Alias lab-<name> -Profile auto
+pwsh ./scripts/model-lab.ps1 test -Alias <name> -Profile auto
+pwsh ./scripts/model-lab.ps1 remove -Alias <name> -Profile auto
 ```
 
-Use `-DeleteWeights` only after confirming no other lab alias uses the physical model. Model Lab refuses to delete production or shared weights.
+Use `-DeleteWeights` only after confirming no other alias uses the physical model. Model Lab refuses to delete production or shared weights.
 
 ## Move Open WebUI to another build
 
@@ -71,7 +71,7 @@ The native profile uses an Ollama process on the host. `.env` values such as `OL
 OLLAMA_CONTEXT_LENGTH=8192 OLLAMA_KEEP_ALIVE=10m ollama serve
 ```
 
-`provision.sh --InstallPrerequisites` can set this up for you: it installs Ollama with Homebrew if missing and loads a launchd agent, `~/Library/LaunchAgents/com.pocketmind.ollama.plist`, that runs `ollama serve` at login and keeps it running with these variables (log: `~/Library/Logs/PocketMind/ollama.log`). It leaves an Ollama that already answers on port 11434 alone. To remove the agent: `launchctl bootout gui/$(id -u)/com.pocketmind.ollama` and delete the plist. Otherwise set the same variables in whichever launcher you use (desktop app, service manager, or script), then confirm `ollama list` shows `corp-general` and `corp-ocr` and that `ollama ps` shows context 8192. A process started by hand stops with its session, and LiteLLM then returns `Cannot connect to host host.docker.internal:11434`. Keep the default `127.0.0.1` bind; the profile never broadens it.
+`provision.sh --InstallPrerequisites` can set this up for you: it installs Ollama with Homebrew if missing and loads a launchd agent, `~/Library/LaunchAgents/com.pocketmind.ollama.plist`, that runs `ollama serve` at login and keeps it running with these variables (log: `~/Library/Logs/PocketMind/ollama.log`). It leaves an Ollama that already answers on port 11434 alone. To remove the agent: `launchctl bootout gui/$(id -u)/com.pocketmind.ollama` and delete the plist. Otherwise set the same variables in whichever launcher you use (desktop app, service manager, or script), then confirm `ollama list` shows `default-general` and `default-ocr` and that `ollama ps` shows context 8192. A process started by hand stops with its session, and LiteLLM then returns `Cannot connect to host host.docker.internal:11434`. Keep the default `127.0.0.1` bind; the profile never broadens it.
 
 ## Host monitoring on macOS
 
@@ -102,17 +102,27 @@ Do not change `LITELLM_SALT_KEY` as part of this; it encrypts database-held cred
 
 Open WebUI persists most settings (connections, default user role, task model, sign-up) in its database after first start, so editing `.env` or the container environment later does not change them. Use Admin Panel → Settings. Any direct edit of `webui.db` requires a backup, a transaction, a restart, and verification.
 
-Recommended settings for this stack: Task Model → External Models → `corp-general`; `corp-ocr` Built-in Tools off. Account creation is closed (`enable_signup` false) so administrators add users. Setting the default user role to `user` removes the `pending` wait, but it matters only if sign-up or SSO is later enabled, and then anyone who can reach Open WebUI would receive chat access and could create API keys. Password sign-up validates only the email format: it does not restrict domains and does not verify mailbox ownership. Domain restriction exists for SSO (`OAUTH_ALLOWED_DOMAINS`).
+Recommended settings for this stack: Task Model → External Models → `default-general`; `default-ocr` Built-in Tools off. Account creation is closed (`enable_signup` false) so administrators add users. Setting the default user role to `user` removes the `pending` wait, but it matters only if sign-up or SSO is later enabled, and then anyone who can reach Open WebUI would receive chat access and could create API keys. Password sign-up validates only the email format: it does not restrict domains and does not verify mailbox ownership. Domain restriction exists for SSO (`OAUTH_ALLOWED_DOMAINS`).
 
 ## API Key Manager
+
+### Default alias rename and existing installations
+
+Fresh installations expose `default-general` and `default-ocr` instead of the former `corp-general` and `corp-ocr`. Custom aliases require no prefix; existing database-backed `lab-...` aliases keep their names and remain listable/removable. Omitting `-Alias` uses the exact Ollama model name/tag.
+
+Repository changes do not migrate a running server's state. Before applying the renamed config to an existing installation, coordinate client model names, Open WebUI Workspace Models and Task Model, saved manual API Key Manager allowlists, and virtual-key model scopes. Existing `corp-*` keys do not automatically gain access to `default-*`; issue replacement scoped keys as part of that migration. Do not restart an existing server with the new aliases until its clients and access settings are ready. The benchmark log and deployment-checklist observations retain the names used when those tests were run.
 
 Users create their own API keys in Open WebUI with the "API Key Manager" model (see ADR 0004). An administrator installs or updates it:
 
 ```powershell
-pwsh ./scripts/install-key-manager.ps1 -AdminEmail <admin email> -PublicModels corp-general
+pwsh ./scripts/install-key-manager.ps1 -AdminEmail <admin email> -PublicModels default-general
 ```
 
 The script prompts for the admin password (or reads `OPENWEBUI_ADMIN_PASSWORD`), registers the Pipe, and keeps existing Valves when updating. `-PublicModels` grants selected models to every signed-in user and skips models that already have an entry; `-GroupId` limits who sees the key manager. Adjust model list, expiry, rate limits, concurrency, key count, and sync interval in Admin Panel → Functions → API Key Manager → Valves.
+
+Model discovery is automatic by default (`auto_discover_models=true`): `models` and `new` fetch the current aliases from LiteLLM's `/v1/models`, including database-backed Model Lab aliases. Registering a model in LiteLLM therefore makes it available for API key requests without editing the function or its Valves. This catalog is read with the service's master key, not filtered by Open WebUI model access grants; only register models intended for self-service API use. LiteLLM team restrictions still apply to the generated keys. To retain an explicit administrator allowlist, set `auto_discover_models=false` and edit `allowed_models`; an empty manual list denies new keys. Discovery failures do not fall back to the old list or issue unrestricted keys. Listing and revoking existing keys does not require model discovery.
+
+To update an existing server, copy the updated `openwebui/functions/api_key_manager.py` and run `pwsh ./scripts/install-key-manager.ps1 -AdminEmail <admin email>` from the repository on that server. No Compose restart is needed. Existing Valves are preserved; the new discovery Valve defaults to true, so a previously saved `allowed_models` list is ignored unless discovery is explicitly disabled. Confirm the setting in Admin Panel → Functions → API Key Manager → Valves and type `models` in a new chat. Discovery changes which models can receive **new** keys; every key still permits only its selected model and existing keys are unchanged.
 
 Operations:
 
@@ -138,7 +148,7 @@ Enable it by adding `PROXY_ENABLED=true` to the private `.env` (`PROXY_BIND_ADDR
 - **Share it on the network:** the proxy listens on `0.0.0.0` by default; set `PROXY_BIND_ADDRESS` to the host's LAN IP to use one interface, or `127.0.0.1` to keep it local, run `setup.ps1`, and set the API Key Manager Valve `public_base_url` to `http://<host-ip>:<PROXY_API_PORT>/v1`. The proxy uses plain HTTP; read ADR 0005 first.
 - **Limit clients:** create `nginx/local/<name>.conf` with `allow <cidr>;` lines and `deny all;`, then `docker exec pocketmind-nginx nginx -s reload`. Check the client address in `docker logs pocketmind-nginx` first; Docker Desktop shows the VM gateway for everyone.
 - **Allow another LiteLLM endpoint:** edit the allow-list regex in `nginx/nginx.conf`, update `tests/proxy-contract.ps1`, run the contract, and restart nginx.
-- **Verify:** `verify-stack.ps1` creates a short-lived key limited to `corp-general`, lists models and chats through the API port, expects 404 for `/ui/`, `/openapi.json`, `/metrics/`, `/v1/model/info`, `/team/list`, `/key/generate`, and `/model/new`, and expects 401 without a key.
+- **Verify:** `verify-stack.ps1` creates a short-lived key limited to `default-general`, lists models and chats through the API port, expects 404 for `/ui/`, `/openapi.json`, `/metrics/`, `/v1/model/info`, `/team/list`, `/key/generate`, and `/model/new`, and expects 401 without a key.
 - **Logs:** `docker logs pocketmind-nginx` (standard access log; request headers such as keys are not logged).
 - **Stop only the proxy:** remove `PROXY_ENABLED=true` and run `setup.ps1` again, or `docker compose <profile files> -f docker-compose.proxy.yml rm -sf nginx`.
 
@@ -197,7 +207,7 @@ Follow the Quick Tunnel section in the root README. Confirm the tunnel targets O
 3. Run full verification.
 4. Check `ollama ps` during a representative request.
 5. Check Grafana/Prometheus if latency or GPU placement is unexpected.
-6. Confirm no unwanted `lab-*` aliases remain.
+6. Confirm no unwanted custom aliases remain.
 7. Check disk use before pulling another model.
 8. Keep a recent PostgreSQL/Open WebUI backup before upgrades.
 9. On macOS, confirm native Ollama and `node_exporter` are running and `ollama ps` shows context 8192.
@@ -207,7 +217,7 @@ Follow the Quick Tunnel section in the root README. Confirm the tunnel targets O
 ## Rollback principles
 
 - Production model rollback: revert the version-controlled alias/environment documentation, re-pull the previous exact tag, recreate LiteLLM if config changed, and rerun contracts plus smoke/runtime tests.
-- Model Lab rollback: remove the `lab-*` alias; omit `-DeleteWeights` until the alias removal is verified.
+- Model Lab rollback: remove the custom alias; omit `-DeleteWeights` until the alias removal is verified.
 - Open WebUI metadata rollback: restore from a verified Open WebUI backup or use supported admin APIs/UI. Direct SQLite edits require a backup, schema inspection, transaction, and post-restart verification.
 - Image rollback: restore previously tested image pins in `.env`/`.env.example`, recreate the affected services, and verify.
 

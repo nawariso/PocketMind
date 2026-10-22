@@ -12,7 +12,7 @@ LiteLLM supports database-backed model management, and PocketMind already uses P
 
 Enable database model storage and provide `scripts/model-lab.ps1` with four actions:
 
-- `add` — pull/show an exact tag and register a `lab-*` alias;
+- `add` — pull/show an exact tag and register a custom alias;
 - `list` — inspect lab mappings;
 - `test` — run a bounded deterministic text test;
 - `remove` — remove the alias, optionally removing safe unshared weights.
@@ -21,7 +21,7 @@ Production aliases remain in version-controlled config. Model Lab aliases persis
 
 ## Safety constraints
 
-- Enforce the `lab-*` namespace.
+- Accept custom names without a prefix; protect default aliases and reject collisions with all registered aliases. Identify removable aliases by `model_info.db_model`, not their name.
 - Validate exact Ollama tag syntax.
 - Derive protected physical models from production config.
 - Refuse production/shared weight deletion before removing an alias.
@@ -44,4 +44,4 @@ Production aliases remain in version-controlled config. Model Lab aliases persis
 
 ## Rollback
 
-Remove all `lab-*` aliases, disable database-backed model management if no DB-managed features remain, recreate LiteLLM, and verify only production aliases are exposed. Preserve a PostgreSQL backup before changing storage behavior.
+Remove all custom aliases, disable database-backed model management if no DB-managed features remain, recreate LiteLLM, and verify only production aliases are exposed. Preserve a PostgreSQL backup before changing storage behavior.

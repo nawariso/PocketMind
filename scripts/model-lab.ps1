@@ -15,7 +15,7 @@ Set-StrictMode -Version Latest
 . (Join-Path $PSScriptRoot 'common.ps1')
 
 $liteLlmBase = 'http://localhost:4000'
-$protectedAliases = @('corp-general', 'corp-ocr')
+$protectedAliases = @('default-general', 'default-ocr')
 
 function Assert-OllamaModelTag {
     param([Parameter(Mandatory)] [string] $Value)
@@ -34,8 +34,8 @@ function Get-ProtectedPhysicalModels {
 
 function Assert-LabAlias {
     param([Parameter(Mandatory)] [string] $Value)
-    if ($Value -notmatch '^lab-[a-z0-9][a-z0-9._-]{0,62}$') {
-        throw "Alias must start with 'lab-' and contain only lowercase letters, numbers, dot, underscore, or dash."
+    if ($Value.Length -gt 128 -or $Value -notmatch '^[\p{L}\p{N}][\p{L}\p{M}\p{N}._:/-]*$') {
+        throw 'Alias must start with a letter or number, contain at most 128 characters, and use letters, numbers, dot, underscore, colon, slash, or dash (no spaces or wildcards). No prefix is required.'
     }
     if ($protectedAliases -contains $Value) {
         throw "Protected production alias cannot be changed: $Value"
@@ -46,8 +46,8 @@ function Resolve-LabAlias {
     param([string] $RequestedAlias, [string] $PhysicalModel)
     if (-not [string]::IsNullOrWhiteSpace($RequestedAlias)) { return $RequestedAlias }
     if ([string]::IsNullOrWhiteSpace($PhysicalModel)) { throw '-Model or -Alias is required.' }
-    $safe = ($PhysicalModel.ToLowerInvariant() -replace '[^a-z0-9._-]', '-')
-    return "lab-$safe"
+    # Physical model tags are already valid API aliases; preserve them when no alias is supplied.
+    return $PhysicalModel
 }
 
 function Invoke-Ollama {
@@ -64,19 +64,34 @@ function Invoke-Ollama {
     if ($LASTEXITCODE -ne 0) { throw "Ollama command failed: ollama $($Arguments -join ' ')" }
 }
 
-function Get-LabDeployments {
+function Get-AllModelDeployments {
     $response = Invoke-RestMethod -Uri "$liteLlmBase/model/info" -Headers (Get-PocBearerHeaders) -TimeoutSec 30
     $dataProperty = $response.PSObject.Properties['data']
     $items = if ($null -ne $dataProperty) { @($dataProperty.Value) } else { @($response) }
-    return @($items | Where-Object {
-        $nameProperty = $_.PSObject.Properties['model_name']
-        $null -ne $nameProperty -and [string]$nameProperty.Value -like 'lab-*'
+    return @($items | Where-Object { $null -ne $_.PSObject.Properties['model_name'] })
+}
+
+function Get-LabDeployments {
+    # Storage metadata identifies custom models; names (including legacy lab-* names) are arbitrary.
+    return @(Get-AllModelDeployments | Where-Object {
+        $infoProperty = $_.PSObject.Properties['model_info']
+        $info = if ($null -ne $infoProperty) { $infoProperty.Value } else { $null }
+        $dbProperty = if ($null -ne $info) { $info.PSObject.Properties['db_model'] } else { $null }
+        $_.model_name -notin $protectedAliases -and
+        $null -ne $dbProperty -and $dbProperty.Value -eq $true
     })
 }
 
 function Find-LabDeployment {
     param([Parameter(Mandatory)] [string] $LabAlias)
     return @(Get-LabDeployments | Where-Object { $_.model_name -eq $LabAlias }) | Select-Object -First 1
+}
+
+function Assert-AliasAvailable {
+    param([Parameter(Mandatory)] [string] $Value)
+    if (@(Get-AllModelDeployments | Where-Object { $_.model_name -eq $Value }).Count -gt 0) {
+        throw "Model alias already exists: $Value"
+    }
 }
 
 function Assert-WeightsDeletionSafe {
@@ -110,7 +125,7 @@ try {
             Assert-OllamaModelTag -Value $Model
             $labAlias = Resolve-LabAlias -RequestedAlias $Alias -PhysicalModel $Model
             Assert-LabAlias -Value $labAlias
-            if ($null -ne (Find-LabDeployment -LabAlias $labAlias)) { throw "Model Lab alias already exists: $labAlias" }
+            Assert-AliasAvailable -Value $labAlias
 
             $freeDisk = Get-PSDrive -Name ([IO.Path]::GetPathRoot($script:PocRepoRoot).TrimEnd(':', '\')) -ErrorAction SilentlyContinue
             if ($null -ne $freeDisk) { Write-Host ("Host free disk: {0:N1} GB" -f ($freeDisk.Free / 1GB)) }
@@ -188,7 +203,7 @@ try {
             $physicalModel = $physicalModel -replace '^ollama_chat/', ''
             if ($DeleteWeights) {
                 Assert-WeightsDeletionSafe -PhysicalModel $physicalModel -RemovingAlias $labAlias `
-                    -Deployments @(Get-LabDeployments)
+                    -Deployments @(Get-AllModelDeployments)
             }
             $body = @{ id = [string]$deployment.model_info.id } | ConvertTo-Json
             Invoke-RestMethod -Uri "$liteLlmBase/model/delete" -Method Post -Headers $headers `

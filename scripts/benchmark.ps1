@@ -10,7 +10,7 @@ Set-StrictMode -Version Latest
 try {
     $headers = Get-PocBearerHeaders
     $body = @{
-        model = 'corp-general'
+        model = 'default-general'
         messages = @(@{ role = 'user'; content = 'Briefly explain why local AI inference is useful.' })
         max_tokens = $MaxTokens
         temperature = 0

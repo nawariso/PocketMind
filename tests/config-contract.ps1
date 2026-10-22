@@ -321,25 +321,25 @@ function Test-GeneralModelContract {
     $expectedModel = 'qwen3:4b-instruct-2507-q4_K_M'
     $litellmConfig = Get-Content -Raw -LiteralPath (Join-Path $repoRoot 'litellm/config.yaml')
     Assert-True -Condition ($litellmConfig.Contains("model: ollama_chat/$expectedModel")) `
-        -Message "corp-general must route to exact model $expectedModel"
+        -Message "default-general must route to exact model $expectedModel"
 
     $envExample = Get-Content -Raw -LiteralPath (Join-Path $repoRoot '.env.example')
     Assert-True -Condition ($envExample.Contains("OLLAMA_MODEL=$expectedModel")) `
         -Message ".env.example must use exact model $expectedModel"
 
     $readmeContent = Get-Content -Raw -LiteralPath (Join-Path $repoRoot 'README.md')
-    Assert-True -Condition ($readmeContent.Contains(('corp-general` (`{0}`)' -f $expectedModel))) `
+    Assert-True -Condition ($readmeContent.Contains(('default-general` (`{0}`)' -f $expectedModel))) `
         -Message "README must document exact model $expectedModel"
 }
 
 function Test-OcrModelContract {
     $litellmConfig = Get-Content -Raw -LiteralPath (Join-Path $repoRoot 'litellm/config.yaml')
-    Assert-True -Condition ($litellmConfig.Contains('model_name: corp-ocr')) `
-        -Message 'LiteLLM must expose the corp-ocr alias'
+    Assert-True -Condition ($litellmConfig.Contains('model_name: default-ocr')) `
+        -Message 'LiteLLM must expose the default-ocr alias'
     Assert-True -Condition ($litellmConfig.Contains('model: ollama_chat/scb10x/typhoon-ocr1.5-3b')) `
-        -Message 'corp-ocr must route to the official Typhoon OCR Ollama build'
+        -Message 'default-ocr must route to the official Typhoon OCR Ollama build'
     Assert-True -Condition ($litellmConfig.Contains('supports_vision: true')) `
-        -Message 'corp-ocr must advertise vision capability'
+        -Message 'default-ocr must advertise vision capability'
     Assert-True -Condition (-not $litellmConfig.Contains('gemma4:12b')) `
         -Message 'LiteLLM must not retain the replaced Gemma 4 model'
 

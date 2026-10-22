@@ -13,15 +13,15 @@ try {
     Wait-PocHttp -Uri 'http://localhost:4000/health/readiness' | Out-Null
 
     $models = Invoke-RestMethod -Uri 'http://localhost:4000/v1/models' -Headers $headers -TimeoutSec 15
-    if (@($models.data.id) -notcontains 'corp-general') {
-        throw "LiteLLM does not expose model alias 'corp-general'."
+    if (@($models.data.id) -notcontains 'default-general') {
+        throw "LiteLLM does not expose model alias 'default-general'."
     }
-    if (@($models.data.id) -notcontains 'corp-ocr') {
-        throw "LiteLLM does not expose OCR model alias 'corp-ocr'."
+    if (@($models.data.id) -notcontains 'default-ocr') {
+        throw "LiteLLM does not expose OCR model alias 'default-ocr'."
     }
 
     $body = @{
-        model = 'corp-general'
+        model = 'default-general'
         messages = @(@{ role = 'user'; content = 'Reply with exactly: POC_OK' })
         max_tokens = 16
         temperature = 0
@@ -39,7 +39,7 @@ try {
         throw "Invalid API key was not rejected with HTTP 401 (received $badStatus)."
     }
 
-    Write-Host "Smoke test passed: alias=corp-general, response=$($text.Trim()), invalid-key=401" -ForegroundColor Green
+    Write-Host "Smoke test passed: alias=default-general, response=$($text.Trim()), invalid-key=401" -ForegroundColor Green
 }
 catch {
     Write-Error "Smoke test failed: $($_.Exception.Message)"

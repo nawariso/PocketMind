@@ -16,7 +16,7 @@ Record:
 - intended workload;
 - expected fit against 4 GB VRAM and approximately 24 GB host RAM.
 
-Use Model Lab for reversible evaluation. Never replace `corp-general` or `corp-ocr` before evidence exists.
+Use Model Lab for reversible evaluation. Never replace `default-general` or `default-ocr` before evidence exists.
 
 ## Controlled environment
 
@@ -97,7 +97,7 @@ A production candidate should:
 - provide a meaningful quality gain for its role;
 - support required capabilities honestly;
 - have a rollback path and exact tag;
-- preserve `corp-general`/`corp-ocr` client contracts;
+- preserve `default-general`/`default-ocr` client contracts;
 - pass smoke tests and invalid-key rejection after integration.
 
 A model may be retained as an opt-in lab model even if too slow for production default.
@@ -105,7 +105,7 @@ A model may be retained as an opt-in lab model even if too slow for production d
 ## Decision outcomes
 
 - **Promote:** update production config/contracts/docs in a reviewed change.
-- **Keep experimental:** retain/recreate a `lab-*` alias as needed; do not grant broad access.
+- **Keep experimental:** retain/recreate a custom alias as needed; do not grant broad access.
 - **Reject but retain weights:** remove alias only.
 - **Reject and remove:** remove alias with `-DeleteWeights` after shared/production safety checks.
 

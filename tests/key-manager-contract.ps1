@@ -20,12 +20,14 @@ if (Test-Path -LiteralPath $pipePath) {
         '"duration": self.valves.key_duration',      # every key expires
         'default=20, ge=1, le=100',                  # total key cap per user
         '"models": [model]',                         # every key is limited to exactly one model
-        'self._pick_model(',                         # the model must come from the administrator's list
+        'self._pick_model(',                         # the model must come from discovery or the manual allowlist
+        'auto_discover_models',
+        'self._litellm("GET", "/v1/models")',         # includes database-backed Model Lab aliases
         'members_with_roles',                        # the key's team comes from LiteLLM team membership
         'get_super_admin_user',                      # mirrored groups are owned by an administrator
         'litellm_team_id',                           # sync only rewrites groups it created
         'Only administrators can run `sync`.',       # sync changes keys of other users
-        'No models are enabled for API keys',        # empty allowlist means all models in LiteLLM
+        'No models are enabled for API keys',        # empty catalogs/allowlists must never issue unrestricted keys
         '"max_parallel_requests"',
         '"rpm_limit"',
         '"tpm_limit"',

@@ -153,14 +153,14 @@ try {
         # A short-lived key limited to one model: the proxy check must not rely on the master key.
         # A unique alias: LiteLLM keeps the alias of an expired key, and an interrupted run must not block the next one.
         $proxyKeyAlias = 'poc-verify-proxy-' + [guid]::NewGuid().ToString('N').Substring(0, 8)
-        $proxyKeyBody = @{ key_alias = $proxyKeyAlias; duration = '10m'; models = @('corp-general') } | ConvertTo-Json
+        $proxyKeyBody = @{ key_alias = $proxyKeyAlias; duration = '10m'; models = @('default-general') } | ConvertTo-Json
         $proxyKey = (Invoke-RestMethod -Uri 'http://localhost:4000/key/generate' -Method Post -Headers (Get-PocBearerHeaders) `
             -ContentType 'application/json' -Body $proxyKeyBody -TimeoutSec 30).key
         try {
             $scoped = @{ Authorization = "Bearer $proxyKey" }
             $modelsViaProxy = Invoke-RestMethod -Uri "$apiBase/v1/models" -Headers $scoped -TimeoutSec 30
-            if (@($modelsViaProxy.data.id) -notcontains 'corp-general') { throw 'The proxy API port did not list corp-general.' }
-            $chatBody = @{ model = 'corp-general'; messages = @(@{ role = 'user'; content = 'Reply with exactly: PROXY_OK' }); max_tokens = 16; temperature = 0 } | ConvertTo-Json -Depth 6
+            if (@($modelsViaProxy.data.id) -notcontains 'default-general') { throw 'The proxy API port did not list default-general.' }
+            $chatBody = @{ model = 'default-general'; messages = @(@{ role = 'user'; content = 'Reply with exactly: PROXY_OK' }); max_tokens = 16; temperature = 0 } | ConvertTo-Json -Depth 6
             $chat = Invoke-RestMethod -Uri "$apiBase/v1/chat/completions" -Method Post -Headers $scoped -ContentType 'application/json' -Body $chatBody -TimeoutSec 120
             if ([string]$chat.choices[0].message.content -notmatch 'PROXY_OK') { throw 'Chat through the proxy API port did not return the expected text.' }
 

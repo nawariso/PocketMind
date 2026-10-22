@@ -18,7 +18,7 @@ flowchart LR
     Nginx -->|only /v1 inference paths| LiteLLM
 ```
 
-The default text model is `corp-general` (`qwen3:4b-instruct-2507-q4_K_M`). It is a text-only Qwen 3 4B Instruct Q4 model selected for stronger Thai, reasoning, coding, and tool calling than the previous Llama 3.2 3B while remaining practical on a 4 GB laptop GPU through partial CPU/RAM offload. The stack also installs `corp-ocr` (`scb10x/typhoon-ocr1.5-3b`), the Typhoon-recommended Ollama build for Thai and English document OCR.
+The default text model is `default-general` (`qwen3:4b-instruct-2507-q4_K_M`). It is a text-only Qwen 3 4B Instruct Q4 model selected for stronger Thai, reasoning, coding, and tool calling than the previous Llama 3.2 3B while remaining practical on a 4 GB laptop GPU through partial CPU/RAM offload. The stack also installs `default-ocr` (`scb10x/typhoon-ocr1.5-3b`), the Typhoon-recommended Ollama build for Thai and English document OCR.
 
 For current architecture, operations, model decisions, security, backup/restore, and troubleshooting knowledge, start with the [Documentation index](docs/README.md). Files under `docs/superpowers/` are historical implementation plans and design snapshots, not the current operational source of truth.
 
@@ -107,7 +107,7 @@ The script does not install Docker, PowerShell, GPU drivers, NVIDIA Container To
 
 ## Model Lab: try another Ollama model without editing config
 
-Model Lab downloads an exact Ollama model tag and registers a separate `lab-*` alias through LiteLLM's database-backed model-management API. Production aliases in `litellm/config.yaml` remain unchanged, aliases persist across LiteLLM restarts, and adding or removing an alias does not require a LiteLLM restart.
+Model Lab downloads an exact Ollama model tag and registers a separate custom alias through LiteLLM's database-backed model-management API. Production aliases in `litellm/config.yaml` remain unchanged, aliases persist across LiteLLM restarts, and adding or removing an alias does not require a LiteLLM restart.
 
 ### Model Lab prerequisites
 
@@ -123,17 +123,17 @@ Before using Model Lab:
 
 | Action | Required input | Important options | Behavior |
 |---|---|---|---|
-| `add` | `-Model <exact-tag>` | `-Alias lab-*`, `-Profile auto` | Pulls and inspects the model, creates a persistent LiteLLM alias, and verifies discovery. |
+| `add` | `-Model <exact-tag>` | `-Alias <name>`, `-Profile auto` | Pulls and inspects the model, creates a persistent LiteLLM alias, and verifies discovery. |
 | `list` | none | `-Profile auto` | Lists Model Lab aliases, physical models, and deployment IDs. |
-| `test` | `-Alias lab-*` | `-Prompt`, `-MaxTokens` | Sends one deterministic text chat request and reports latency and output tokens. `-MaxTokens` defaults to `128` and accepts `8`–`2048`. |
-| `remove` | `-Alias lab-*` | `-DeleteWeights` | Removes the LiteLLM alias; weights are retained unless explicitly requested. |
+| `test` | `-Alias <name>` | `-Prompt`, `-MaxTokens` | Sends one deterministic text chat request and reports latency and output tokens. `-MaxTokens` defaults to `128` and accepts `8`–`2048`. |
+| `remove` | `-Alias <name>` | `-DeleteWeights` | Removes the LiteLLM alias; weights are retained unless explicitly requested. |
 
-`-Alias` is optional for `add`; if omitted, the script derives a lowercase `lab-*` alias from the physical model name. Supplying an explicit short alias is recommended because it is easier to recognize in Open WebUI and test output. Aliases may contain lowercase letters, numbers, dot, underscore, and dash.
+`-Alias` is optional for `add`; if omitted, the exact physical model name/tag becomes the alias (for example `qwen3:8b`). No prefix is required. Explicit aliases preserve spelling and case, may contain Unicode letters/numbers, dot, underscore, colon, slash, and dash, and must start with a letter or number. Spaces, wildcards, and aliases longer than 128 characters are rejected. The initial aliases `default-general` and `default-ocr` are protected. Database-backed aliases are identified by storage metadata, so existing `lab-...` aliases remain manageable.
 
 Add and download a model:
 
 ```powershell
-pwsh ./scripts/model-lab.ps1 add -Model qwen3:8b -Alias lab-qwen3-8b -Profile auto
+pwsh ./scripts/model-lab.ps1 add -Model qwen3:8b -Alias Qwen3-8B -Profile auto
 ```
 
 List registered lab aliases:
@@ -145,7 +145,7 @@ pwsh ./scripts/model-lab.ps1 list -Profile auto
 Run a timed text test with a larger output budget:
 
 ```powershell
-pwsh ./scripts/model-lab.ps1 test -Alias lab-qwen3-8b `
+pwsh ./scripts/model-lab.ps1 test -Alias Qwen3-8B `
   -Prompt 'อธิบายข้อดีข้อเสียของ local AI แบบสั้น ๆ' `
   -MaxTokens 256 `
   -Profile auto
@@ -158,52 +158,52 @@ The built-in `test` action exercises text chat only. It does not prove image inp
 Remove only the LiteLLM alias and retain downloaded Ollama weights:
 
 ```powershell
-pwsh ./scripts/model-lab.ps1 remove -Alias lab-qwen3-8b -Profile auto
+pwsh ./scripts/model-lab.ps1 remove -Alias Qwen3-8B -Profile auto
 ```
 
 Remove both the alias and downloaded weights:
 
 ```powershell
-pwsh ./scripts/model-lab.ps1 remove -Alias lab-qwen3-8b -DeleteWeights -Profile auto
+pwsh ./scripts/model-lab.ps1 remove -Alias Qwen3-8B -DeleteWeights -Profile auto
 ```
 
-Without `-DeleteWeights`, adding the same physical model again can reuse the local weights. With `-DeleteWeights`, the script refuses to remove a production model or weights still referenced by another lab alias.
+Without `-DeleteWeights`, adding the same physical model again can reuse the local weights. With `-DeleteWeights`, the script refuses to remove a production model or weights still referenced by any other alias.
 
 Windows PowerShell 5.1 uses the same actions with the compatibility invocation form:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\model-lab.ps1 add -Model qwen3:8b -Alias lab-qwen3-8b -Profile auto
-powershell -ExecutionPolicy Bypass -File .\scripts\model-lab.ps1 test -Alias lab-qwen3-8b -MaxTokens 256 -Profile auto
-powershell -ExecutionPolicy Bypass -File .\scripts\model-lab.ps1 remove -Alias lab-qwen3-8b -Profile auto
+powershell -ExecutionPolicy Bypass -File .\scripts\model-lab.ps1 add -Model qwen3:8b -Alias Qwen3-8B -Profile auto
+powershell -ExecutionPolicy Bypass -File .\scripts\model-lab.ps1 test -Alias Qwen3-8B -MaxTokens 256 -Profile auto
+powershell -ExecutionPolicy Bypass -File .\scripts\model-lab.ps1 remove -Alias Qwen3-8B -Profile auto
 ```
 
 ### Recommended Model Lab workflow
 
 1. Verify the exact Ollama tag and estimate whether its quantized weights plus an 8192-token context fit this machine.
-2. Run `add` with a unique `lab-*` alias. Never reuse `corp-general` or `corp-ocr` for an experiment.
+2. Run `add` with a unique custom alias. Never reuse `default-general` or `default-ocr` for an experiment.
 3. Run `list` to confirm the alias-to-physical-model mapping.
 4. Run the same `test` prompt at least twice and record cold and warm latency.
 5. Test the actual workload separately: Thai, reasoning, coding, tools, vision, or OCR as applicable.
 6. Inspect placement with `docker exec pocketmind-ollama ollama ps` for container profiles or `ollama ps` for the native profile. Avoid concurrent large-model requests on memory-constrained hardware.
-7. If the model is not useful, run `remove`; add `-DeleteWeights` only when no other lab alias needs the same weights.
+7. If the model is not useful, run `remove`; add `-DeleteWeights` only when no other alias needs the same weights.
 8. If the model should replace a production alias, update the version-controlled config and normal contracts in a separate reviewed change. Model Lab does not promote a model automatically.
 
 ### Open WebUI access
 
-The local CLI can test a lab alias immediately. Open WebUI administrators also see the alias after refreshing the browser. Regular Open WebUI users do not receive access automatically: an administrator must create a Workspace Model that uses the `lab-*` alias as its base model, then grant the intended users or `user:*` read access. This separation prevents newly downloaded experimental models from becoming available to every tester without review.
+The local CLI can test a custom alias immediately. Open WebUI administrators also see the alias after refreshing the browser. Regular Open WebUI users do not receive access automatically: an administrator must create a Workspace Model that uses the custom alias as its base model, then grant the intended users or `user:*` read access. This separation prevents newly downloaded experimental models from becoming available to every tester without review.
 
 ### Model Lab troubleshooting
 
-- **Alias already exists:** run `list`, choose another `lab-*` alias, or remove the old alias first.
+- **Alias already exists:** run `list`, choose another custom alias, or remove the old alias first.
 - **Alias is absent in Open WebUI:** hard-refresh or sign out/in. Admins should see the base alias; regular users need a Workspace Model and explicit read grant.
 - **Download succeeds but inference is slow:** inspect `ollama ps` placement, shorten context/history, close other GPU workloads, and compare warm runs. Models larger than VRAM will offload to CPU/RAM.
 - **Test times out:** each Model Lab text test has a 300-second request timeout. A timeout usually means the model is too slow, still loading, or under memory pressure; inspect `ollama ps` and runtime logs before retrying.
 - **Out of memory or context errors:** stop other model requests, start a new chat, reduce prompt/history, or remove the candidate. Do not raise context blindly because KV-cache memory also grows.
 - **Tool or image errors:** confirm the model advertises the capability. Do not send tools to a completion/vision-only model, and do not assume a text model accepts images.
 - **Remove keeps disk usage:** this is expected without `-DeleteWeights`; run the explicit deletion form only after confirming the physical model is not shared.
-- **Partial add failure:** the script attempts to roll back the database deployment. Run `list` afterward and remove any remaining `lab-*` alias before retrying.
+- **Partial add failure:** the script attempts to roll back the database deployment. Run `list` afterward and remove any remaining custom alias before retrying.
 
-The namespace and deletion guards are protections implemented by `model-lab.ps1`, not server-side LiteLLM authorization rules. Treat the LiteLLM master key as an administrator credential: anyone holding it can call model-management endpoints directly and bypass the script. Never expose that key through Open WebUI, a public tunnel, Postman collections, logs, or source control.
+The default-alias and deletion guards are protections implemented by `model-lab.ps1`, not server-side LiteLLM authorization rules. Treat the LiteLLM master key as an administrator credential: anyone holding it can call model-management endpoints directly and bypass the script. Never expose that key through Open WebUI, a public tunnel, Postman collections, logs, or source control.
 
 For the normal stack setup on Windows PowerShell 5.1, use:
 
@@ -263,7 +263,7 @@ OLLAMA_CONTEXT_LENGTH=8192 OLLAMA_KEEP_ALIVE=10m ollama serve
 
 A process started by hand stops with its session; set the same variables in whichever launcher you use. Details are in the operations runbook.
 
-**Recommended Open WebUI setting.** Set Admin Panel → Settings → Interface → Task Model → External Models to `corp-general`. Without it, follow-up suggestions, titles, and tags are generated by the model of the current chat; `corp-ocr` cannot do that and Open WebUI shows its suggestions one character per line.
+**Recommended Open WebUI setting.** Set Admin Panel → Settings → Interface → Task Model → External Models to `default-general`. Without it, follow-up suggestions, titles, and tags are generated by the model of the current chat; `default-ocr` cannot do that and Open WebUI shows its suggestions one character per line.
 
 The compatibility form still works:
 
@@ -309,13 +309,13 @@ The prerequisite checker refuses to start while any secret still has a `CHANGE_M
 
 ## Open WebUI login
 
-Open `http://localhost:3000`. On a fresh volume, create the first local account and select `corp-general` for general text work or `corp-ocr` for document images. Open WebUI connects only to LiteLLM; direct Ollama access is disabled.
+Open `http://localhost:3000`. On a fresh volume, create the first local account and select `default-general` for general text work or `default-ocr` for document images. Open WebUI connects only to LiteLLM; direct Ollama access is disabled.
 
 ## Thai and English OCR with Typhoon
 
-`corp-ocr` routes to `scb10x/typhoon-ocr1.5-3b`, the on-device Ollama build recommended by the Typhoon OCR 1.5 authors. The exact Hugging Face checkpoint `typhoon-ai/typhoon-ocr1.5-2b` uses Qwen3-VL 2B; the recommended Ollama build uses a quantized Qwen2.5-VL 3B model. This distinction is intentional because the authors warn that third-party GGUF conversions may reduce OCR accuracy.
+`default-ocr` routes to `scb10x/typhoon-ocr1.5-3b`, the on-device Ollama build recommended by the Typhoon OCR 1.5 authors. The exact Hugging Face checkpoint `typhoon-ai/typhoon-ocr1.5-2b` uses Qwen3-VL 2B; the recommended Ollama build uses a quantized Qwen2.5-VL 3B model. This distinction is intentional because the authors warn that third-party GGUF conversions may reduce OCR accuracy.
 
-This is a task-specific OCR model, not a general chat or VQA model. Its Ollama build supports completion and vision but not tool calling. In Open WebUI, keep `Built-in Tools: Off` for `corp-ocr`; otherwise Open WebUI can attach a `tools` payload and Ollama will reject the request. Start a new chat, select `corp-ocr`, attach one document image, set temperature to `0.1`, and use the model's required prompt:
+This is a task-specific OCR model, not a general chat or VQA model. Its Ollama build supports completion and vision but not tool calling. In Open WebUI, keep `Built-in Tools: Off` for `default-ocr`; otherwise Open WebUI can attach a `tools` payload and Ollama will reject the request. Start a new chat, select `default-ocr`, attach one document image, set temperature to `0.1`, and use the model's required prompt:
 
 ```text
 Extract all text from the image.
@@ -332,7 +332,7 @@ Formatting Rules:
 - Checkboxes: Use ☐ for unchecked and ☑ for checked boxes.
 ```
 
-Use `corp-general` for complex reasoning or ordinary chat. Typhoon OCR can still hallucinate, so compare important output with the source document. Image inputs consume context tokens; if Ollama reports `exceeds the available context size`, increase `OLLAMA_CONTEXT_LENGTH` in the private `.env` and recreate the Ollama container. Larger contexts consume more RAM and KV-cache memory.
+Use `default-general` for complex reasoning or ordinary chat. Typhoon OCR can still hallucinate, so compare important output with the source document. Image inputs consume context tokens; if Ollama reports `exceeds the available context size`, increase `OLLAMA_CONTEXT_LENGTH` in the private `.env` and recreate the Ollama container. Larger contexts consume more RAM and KV-cache memory.
 
 ## Self-service API keys for Open WebUI users
 
@@ -342,7 +342,9 @@ Pilot users can create their own scoped LiteLLM key without leaving Open WebUI. 
 pwsh ./scripts/install-key-manager.ps1 -AdminEmail <admin email>
 ```
 
-The script prompts for the admin password (or reads `OPENWEBUI_ADMIN_PASSWORD`) and registers the model for every signed-in user; add `-GroupId <id>` to limit it to groups. Add `-PublicModels corp-general,corp-ocr` (comma-separated is fine) to make those models visible to every signed-in user (a model that already has an Open WebUI entry is skipped, so check its access in Admin → Settings → Models). Users select "API Key Manager" and type `models`, `new <model>` (optionally `new <model> as <label>`), `list`, `rotate <alias>`, `revoke <alias>`, or `help`. Each key works for one model, a user may create several keys for the same model (up to 20 in total by default), each key expires, is limited in rate and concurrency by the function's Valves, is shown only once, and is attributed to the LiteLLM team the user belongs to (add members by email in the LiteLLM UI). Teams are managed only in LiteLLM and are mirrored to Open WebUI groups automatically, or immediately when an administrator types `sync`. Users call LiteLLM directly, so a shared pilot should reach it only through the nginx proxy described below, which forwards just the inference paths. See [ADR 0004](docs/decisions/0004-self-service-virtual-keys.md) and [security guidance](docs/security.md).
+The script prompts for the admin password (or reads `OPENWEBUI_ADMIN_PASSWORD`) and registers the model for every signed-in user; add `-GroupId <id>` to limit it to groups. Add `-PublicModels default-general,default-ocr` (comma-separated is fine) to make those models visible to every signed-in user (a model that already has an Open WebUI entry is skipped, so check its access in Admin → Settings → Models). Users select "API Key Manager" and type `models`, `new <model>` (optionally `new <model> as <label>`), `list`, `rotate <alias>`, `revoke <alias>`, or `help`. Each key works for one model, a user may create several keys for the same model (up to 20 in total by default), each key expires, is limited in rate and concurrency by the function's Valves, is shown only once, and is attributed to the LiteLLM team the user belongs to (add members by email in the LiteLLM UI). Teams are managed only in LiteLLM and are mirrored to Open WebUI groups automatically, or immediately when an administrator types `sync`. Users call LiteLLM directly, so a shared pilot should reach it only through the nginx proxy described below, which forwards just the inference paths. See [ADR 0004](docs/decisions/0004-self-service-virtual-keys.md) and [security guidance](docs/security.md).
+
+The function discovers the current LiteLLM model aliases automatically, including new custom models: users can type `models`, then `new <alias>` without an administrator editing `allowed_models`. This offers the master-key catalog for self-service API keys, independently of Open WebUI model visibility; LiteLLM team restrictions still apply. To use a restricted manual list instead, set `auto_discover_models=false` in the function's Valves and maintain `allowed_models`. Existing keys remain limited to their original model. To update a server, copy the updated function source and rerun the installer above; existing Valves are preserved and the new discovery setting defaults to true. No container restart is needed.
 
 ## Test the API key
 
@@ -358,7 +360,7 @@ Body:
 
 ```json
 {
-  "model": "corp-general",
+  "model": "default-general",
   "messages": [
     { "role": "user", "content": "Reply with exactly: API_OK" }
   ],
@@ -514,7 +516,7 @@ Read the generated public HTTPS URL from the logs:
 docker logs pocketmind-cloudflared-quick
 ```
 
-Look for a URL ending in `.trycloudflare.com`, open it from a device on another network, sign in with an existing Open WebUI account, select `corp-general`, and send a test message. Do not publish the temporary URL or any credentials in the repository.
+Look for a URL ending in `.trycloudflare.com`, open it from a device on another network, sign in with an existing Open WebUI account, select `default-general`, and send a test message. Do not publish the temporary URL or any credentials in the repository.
 
 Only Open WebUI port `3000` is proxied by this command. Do not create public tunnels to LiteLLM, PostgreSQL, Ollama, Prometheus, Grafana, or the NVIDIA exporter. In particular, never expose or distribute `LITELLM_MASTER_KEY` as a client API key.
 

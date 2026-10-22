@@ -6,10 +6,10 @@ This is the current internal registry of production and materially evaluated mod
 
 | Alias | Exact physical model | Role | Declared capabilities | Configured context | Quantization | Status |
 |---|---|---|---|---:|---|---|
-| `corp-general` | `qwen3:4b-instruct-2507-q4_K_M` | General Thai/text, reasoning, coding, tools | completion, tools, thinking | 8192 | Q4_K_M | Production |
-| `corp-ocr` | `scb10x/typhoon-ocr1.5-3b` | Thai/English document OCR | completion, vision; no tools | 8192 | Q4_K_M | Production |
+| `default-general` | `qwen3:4b-instruct-2507-q4_K_M` | General Thai/text, reasoning, coding, tools | completion, tools, thinking | 8192 | Q4_K_M | Production |
+| `default-ocr` | `scb10x/typhoon-ocr1.5-3b` | Thai/English document OCR | completion, vision; no tools | 8192 | Q4_K_M | Production |
 
-## `corp-general`
+## `default-general`
 
 - Physical model: `qwen3:4b-instruct-2507-q4_K_M`
 - Parameters observed: 4.0B
@@ -17,10 +17,10 @@ This is the current internal registry of production and materially evaluated mod
 - Installed-model `ollama show` reports native context 262144; PocketMind intentionally configures 8192.
 - Reference placement at 8192 on RTX 3050 Laptop 4 GB: approximately 37% CPU / 63% GPU.
 - Observed generation: approximately 13.5–17.7 eval tokens/s in the benchmark session.
-- Tool call and Thai reasoning passed through the `corp-general` LiteLLM alias.
+- Tool call and Thai reasoning passed through the `default-general` LiteLLM alias.
 - Use Thinking selectively; ordinary requests should prioritize latency.
 
-## `corp-ocr`
+## `default-ocr`
 
 - Physical model: `scb10x/typhoon-ocr1.5-3b`
 - Ollama architecture observed: qwen25vl; parameters 3.8B; quantization Q4_K_M.
@@ -41,7 +41,7 @@ This is the current internal registry of production and materially evaluated mod
 
 ## Experimental models
 
-Model Lab aliases use `lab-*` and live in LiteLLM's database. They do not become cataloged production models until benchmarked, reviewed, and promoted through version-controlled config. Temporary experiments do not belong in this catalog unless their result prevents repeated work or informs a decision.
+Model Lab aliases have no required prefix and live in LiteLLM's database. They do not become cataloged production models until benchmarked, reviewed, and promoted through version-controlled config. Temporary experiments do not belong in this catalog unless their result prevents repeated work or informs a decision.
 
 ## Update checklist
 

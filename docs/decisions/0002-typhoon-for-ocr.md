@@ -10,7 +10,7 @@ The exact Hugging Face Typhoon OCR 1.5 2B checkpoint was considered, but the aut
 
 ## Decision
 
-Route `corp-ocr` to `scb10x/typhoon-ocr1.5-3b` and treat it as a constrained OCR model.
+Route `default-ocr` to `scb10x/typhoon-ocr1.5-3b` and treat it as a constrained OCR model.
 
 Open WebUI metadata must retain:
 
@@ -36,4 +36,4 @@ Use temperature 0.1 and the extraction prompt documented in the root README. Kee
 
 ## Rollback
 
-Evaluate another OCR model behind a `lab-*` alias, verify a known fixture and Open WebUI capability routing, then change only the `corp-ocr` physical mapping in a reviewed change.
+Evaluate another OCR model behind a custom alias, verify a known fixture and Open WebUI capability routing, then change only the `default-ocr` physical mapping in a reviewed change.

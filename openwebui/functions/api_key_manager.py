@@ -1,7 +1,7 @@
 """
 title: API Key Manager
 author: PocketMind
-version: 0.4.0
+version: 0.5.0
 description: Lets signed-in Open WebUI users create, list, rotate, and revoke their own LiteLLM API keys, one model per key and several keys per model, attributed to the LiteLLM team they belong to. LiteLLM teams are the single source of truth and are mirrored to Open WebUI groups.
 """
 
@@ -31,9 +31,13 @@ class Pipe:
             default="http://localhost:4000/v1",
             description="Base URL shown to users in the usage example. Set it to the address users can reach.",
         )
+        auto_discover_models: bool = Field(
+            default=True,
+            description="Offer all model aliases registered in LiteLLM, including newly added models. Disable to use allowed_models instead.",
+        )
         allowed_models: str = Field(
-            default="corp-general,corp-ocr",
-            description="Comma-separated LiteLLM model aliases users may request a key for. Must not be empty.",
+            default="default-general,default-ocr",
+            description="Manual comma-separated model allowlist, used only when auto_discover_models is disabled. Empty denies new keys.",
         )
         key_duration: str = Field(default="30d", description="Key lifetime such as 12h, 30d. Always applied.")
         rpm_limit: int = Field(default=20, ge=1, description="Requests per minute per key.")
@@ -100,11 +104,23 @@ class Pipe:
         return ""
 
     def _models(self):
-        return [m.strip() for m in self.valves.allowed_models.split(",") if m.strip()]
+        if self.valves.auto_discover_models:
+            result = self._litellm("GET", "/v1/models")
+            if not isinstance(result, dict) or not isinstance(result.get("data"), list):
+                raise RuntimeError("LiteLLM returned an invalid model list.")
+            aliases = [entry.get("id") for entry in result["data"] if isinstance(entry, dict)]
+        else:
+            aliases = self.valves.allowed_models.split(",")
+        # Never offer wildcard permissions: each generated key must name one concrete alias.
+        return sorted({
+            alias.strip() for alias in aliases
+            if isinstance(alias, str) and alias.strip() and "*" not in alias
+            and len(alias.split()) == 1
+        })
 
-    def _pick_model(self, text):
+    def _pick_model(self, text, models):
         wanted = (text or "").strip().lower()
-        for model in self._models():
+        for model in models:
             if model.lower() == wanted:
                 return model
         return None
@@ -114,8 +130,6 @@ class Pipe:
             return "API key creation is currently disabled by the administrator."
         if not self._master_key():
             return "The key service is not configured. Please contact the administrator."
-        if not self._models():
-            return "No models are enabled for API keys. Please contact the administrator."
         if not re.fullmatch(r"\d{1,4}[smhd]", self.valves.key_duration):
             return "The key lifetime is misconfigured. Please contact the administrator."
         return None
@@ -336,16 +350,16 @@ class Pipe:
             )
         return "\n".join(lines)
 
-    def _models_text(self, keys):
+    def _models_text(self, keys, models):
         counts = {}
         for k in keys:
             counts[self._key_model(k)] = counts.get(self._key_model(k), 0) + 1
         lines = ["### Models you can request a key for", "", "| Model | Your keys |", "|---|---|"]
-        for model in self._models():
+        for model in models:
             lines.append(f"| `{model}` | {counts.get(model, 0)} |")
         lines.append(
             f"\nYou may hold {self.valves.max_keys_per_user} keys in total. "
-            "Type `new <model>` to create a key for one model, for example `new " + self._models()[0] + "`."
+            "Type `new <model>` to create a key for one model, for example `new " + models[0] + "`."
         )
         return "\n".join(lines)
 
@@ -356,7 +370,7 @@ class Pipe:
             "| Command | What it does |\n|---|---|\n"
             "| `models` | Show the models you can request a key for |\n"
             "| `new <model>` | Create a key for that model (shown **once**) |\n"
-            "| `new <model> as <label>` | Create a key with a name, for example `new corp-general as my-app` |\n"
+            "| `new <model> as <label>` | Create a key with a name, for example `new default-general as my-app` |\n"
             "| `list` | Show your keys without revealing them |\n"
             "| `rotate <alias or model>` | Replace a key (use the alias when you have several for a model) |\n"
             "| `revoke <alias or model>` | Revoke a key (`revoke <model> all` revokes every key for that model) |\n"
@@ -391,12 +405,19 @@ class Pipe:
             keys = await asyncio.to_thread(self._own_keys, user["id"])
             if action in ("list", "status"):
                 return self._describe(keys)
+            # Discover once per command, off the event loop. Listing/revoking existing keys
+            # must still work when the catalog is empty or model discovery is unavailable.
+            if action in ("models", "new"):
+                models = await asyncio.to_thread(self._models)
+                if not models:
+                    return "No models are enabled for API keys. Please contact the administrator."
             if action == "models":
-                return self._models_text(keys)
+                return self._models_text(keys, models)
 
             if action in ("new", "rotate", "revoke") and not args:
-                return f"Tell me which model, for example `{action} {self._models()[0]}`.\n\n" + (
-                    self._models_text(keys) if action == "new" else self._describe(keys)
+                example = models[0] if action == "new" else "<alias or model>"
+                return f"Tell me which model, for example `{action} {example}`.\n\n" + (
+                    self._models_text(keys, models) if action == "new" else self._describe(keys)
                 )
 
             if action == "revoke":
@@ -438,9 +459,9 @@ class Pipe:
                 )
 
             # new <model> [team] [as <label>]
-            model = self._pick_model(args[0])
+            model = self._pick_model(args[0], models)
             if not model:
-                return f"`{args[0]}` is not available for API keys.\n\n" + self._models_text(keys)
+                return f"`{args[0]}` is not available for API keys.\n\n" + self._models_text(keys, models)
             rest = args[1:]
             label = None
             for index, word in enumerate(rest):

@@ -21,10 +21,10 @@ The prerequisite check rejects only `CHANGE_ME` placeholders. It accepts a weak 
 
 ## Model access
 
-- `corp-general` and `corp-ocr` are stable production aliases.
+- `default-general` and `default-ocr` are stable production aliases.
 - Open WebUI user access is controlled by role and workspace model grants.
-- `corp-ocr` must keep Built-in Tools off (`builtin_tools=false`) because Typhoon supports completion/vision but not tool calling.
-- Model Lab's `lab-*` and deletion rules are client-side safeguards in `model-lab.ps1`. Anyone with the LiteLLM master key can bypass them via management APIs.
+- `default-ocr` must keep Built-in Tools off (`builtin_tools=false`) because Typhoon supports completion/vision but not tool calling.
+- Model Lab's default-alias and deletion rules are client-side safeguards in `model-lab.ps1`. Anyone with the LiteLLM master key can bypass them via management APIs.
 - Experimental aliases are admin-visible; ordinary users need an explicit Workspace Model/read grant.
 
 ## Public exposure
