@@ -40,6 +40,9 @@ jobs:
       - name: Model alias behavior
         shell: pwsh
         run: ./tests/model-lab-behavior.ps1
+      - name: Model rename behavior
+        shell: pwsh
+        run: ./tests/rename-model-behavior.ps1
       - name: Privacy script contract
         shell: pwsh
         run: ./tests/privacy-contract.ps1
