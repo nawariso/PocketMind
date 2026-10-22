@@ -1,11 +1,12 @@
 """
 title: API Key Manager
 author: PocketMind
-version: 0.5.0
+version: 0.6.1
 description: Lets signed-in Open WebUI users create, list, rotate, and revoke their own LiteLLM API keys, one model per key and several keys per model, attributed to the LiteLLM team they belong to. LiteLLM teams are the single source of truth and are mirrored to Open WebUI groups.
 """
 
 import asyncio
+from datetime import datetime, timezone
 import json
 import logging
 import os
@@ -33,7 +34,7 @@ class Pipe:
         )
         auto_discover_models: bool = Field(
             default=True,
-            description="Offer all model aliases registered in LiteLLM, including newly added models. Disable to use allowed_models instead.",
+            description="Offer current model aliases registered in LiteLLM, hiding legacy names recorded by the rename script. Disable to use allowed_models instead.",
         )
         allowed_models: str = Field(
             default="default-general,default-ocr",
@@ -103,7 +104,7 @@ class Pipe:
             return str(content).strip()
         return ""
 
-    def _models(self):
+    def _models(self, include_legacy=False):
         if self.valves.auto_discover_models:
             result = self._litellm("GET", "/v1/models")
             if not isinstance(result, dict) or not isinstance(result.get("data"), list):
@@ -112,11 +113,35 @@ class Pipe:
         else:
             aliases = self.valves.allowed_models.split(",")
         # Never offer wildcard permissions: each generated key must name one concrete alias.
-        return sorted({
+        offered = {
             alias.strip() for alias in aliases
             if isinstance(alias, str) and alias.strip() and "*" not in alias
             and len(alias.split()) == 1
-        })
+        }
+        # Renames retain the old inference route for existing keys, but only the new
+        # name should receive newly issued keys. Read provenance, not naming prefixes
+        # or physical-model equality (independent aliases can share the same weights).
+        routes = self._litellm("GET", "/model/info")
+        if not isinstance(routes, dict) or not isinstance(routes.get("data"), list):
+            raise RuntimeError("LiteLLM returned invalid model rename metadata.")
+        legacy = set()
+        for route in routes["data"]:
+            if not isinstance(route, dict) or not isinstance(route.get("model_name"), str):
+                raise RuntimeError("LiteLLM returned invalid model rename metadata.")
+            info = route.get("model_info") or {}
+            if not isinstance(info, dict):
+                raise RuntimeError("LiteLLM returned invalid model rename metadata.")
+            old = info.get("pocketmind_rename_from")
+            if old is None:
+                continue
+            if not isinstance(old, str) or not old or old == route["model_name"]:
+                raise RuntimeError("LiteLLM returned invalid model rename metadata.")
+            # Ignore stale metadata for a replacement absent from live discovery.
+            # In manual mode, keep the allowlist restrictive even if it lacks the new name.
+            if not self.valves.auto_discover_models or route["model_name"] in offered:
+                legacy.add(old)
+        current = sorted(offered - legacy)
+        return (current, legacy) if include_legacy else current
 
     def _pick_model(self, text, models):
         wanted = (text or "").strip().lower()
@@ -350,17 +375,49 @@ class Pipe:
             )
         return "\n".join(lines)
 
-    def _models_text(self, keys, models):
+    @staticmethod
+    def _active_key(key):
+        if key.get("blocked"):
+            return False
+        expires = key.get("expires")
+        if expires is None:
+            return True
+        try:
+            deadline = datetime.fromisoformat(str(expires).replace("Z", "+00:00"))
+            if deadline.tzinfo is None:
+                deadline = deadline.replace(tzinfo=timezone.utc)
+            return deadline > datetime.now(timezone.utc)
+        except (ValueError, TypeError, OverflowError):
+            return False
+
+    def _models_text(self, keys, models, legacy_models=()):
         counts = {}
-        for k in keys:
-            counts[self._key_model(k)] = counts.get(self._key_model(k), 0) + 1
-        lines = ["### Models you can request a key for", "", "| Model | Your keys |", "|---|---|"]
-        for model in models:
-            lines.append(f"| `{model}` | {counts.get(model, 0)} |")
-        lines.append(
-            f"\nYou may hold {self.valves.max_keys_per_user} keys in total. "
-            "Type `new <model>` to create a key for one model, for example `new " + models[0] + "`."
-        )
+        owned_legacy = {}
+        for key in keys:
+            model = self._key_model(key)
+            counts[model] = counts.get(model, 0) + 1
+            scopes = key.get("models") or []
+            if self._active_key(key) and isinstance(scopes, list):
+                for scope in set(m for m in scopes if isinstance(m, str)) & set(legacy_models):
+                    owned_legacy[scope] = owned_legacy.get(scope, 0) + 1
+        if not models and not owned_legacy:
+            return "No models are enabled for API keys. Please contact the administrator."
+        lines = []
+        if models:
+            lines += ["### Models you can request a key for", "", "| Model | Your keys |", "|---|---|"]
+            for model in models:
+                lines.append(f"| `{model}` | {counts.get(model, 0)} |")
+        if owned_legacy:
+            lines += ["", "### Legacy models used by your active keys", "",
+                      "| Model | Your active keys |", "|---|---|"]
+            for model in sorted(owned_legacy):
+                lines.append(f"| `{model}` | {owned_legacy[model]} |")
+            lines.append("\nExisting keys can keep using these names. Use `list`, `rotate`, or `revoke` to manage them; new keys use current names only.")
+        if any(self._key_model(k) not in models for k in keys):
+            lines.append("\nUse `list` to manage keys for earlier or unavailable model names; they still count toward your total.")
+        lines.append(f"\nYou may hold {self.valves.max_keys_per_user} keys in total.")
+        if models:
+            lines.append("Type `new <model>` to create a key for one model, for example `new " + models[0] + "`.")
         return "\n".join(lines)
 
     def _help(self):
@@ -368,7 +425,7 @@ class Pipe:
             "### API Key Manager\n\nEach key works for **one model**, and you can create several keys for the same model. "
             "Type one of these commands:\n\n"
             "| Command | What it does |\n|---|---|\n"
-            "| `models` | Show the models you can request a key for |\n"
+            "| `models` | Show current models and legacy names used by your active keys |\n"
             "| `new <model>` | Create a key for that model (shown **once**) |\n"
             "| `new <model> as <label>` | Create a key with a name, for example `new default-general as my-app` |\n"
             "| `list` | Show your keys without revealing them |\n"
@@ -408,16 +465,16 @@ class Pipe:
             # Discover once per command, off the event loop. Listing/revoking existing keys
             # must still work when the catalog is empty or model discovery is unavailable.
             if action in ("models", "new"):
-                models = await asyncio.to_thread(self._models)
+                models, legacy_models = await asyncio.to_thread(self._models, True)
+                if action == "models":
+                    return self._models_text(keys, models, legacy_models)
                 if not models:
                     return "No models are enabled for API keys. Please contact the administrator."
-            if action == "models":
-                return self._models_text(keys, models)
 
             if action in ("new", "rotate", "revoke") and not args:
                 example = models[0] if action == "new" else "<alias or model>"
                 return f"Tell me which model, for example `{action} {example}`.\n\n" + (
-                    self._models_text(keys, models) if action == "new" else self._describe(keys)
+                    self._models_text(keys, models, legacy_models) if action == "new" else self._describe(keys)
                 )
 
             if action == "revoke":
@@ -461,7 +518,7 @@ class Pipe:
             # new <model> [team] [as <label>]
             model = self._pick_model(args[0], models)
             if not model:
-                return f"`{args[0]}` is not available for API keys.\n\n" + self._models_text(keys, models)
+                return f"`{args[0]}` is not available for API keys.\n\n" + self._models_text(keys, models, legacy_models)
             rest = args[1:]
             label = None
             for index, word in enumerate(rest):

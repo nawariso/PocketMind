@@ -20,6 +20,7 @@ class FakePipe(MODULE.Pipe):
         self.valves.auto_sync_minutes = 0
         self.valves.cooldown_seconds = 0
         self.catalog = {"data": [{"id": "default-general"}]}
+        self.model_info = {"data": []}
         self.keys = []
         self.calls = []
 
@@ -32,6 +33,10 @@ class FakePipe(MODULE.Pipe):
             if isinstance(self.catalog, Exception):
                 raise self.catalog
             return self.catalog
+        if path == "/model/info":
+            if isinstance(self.model_info, Exception):
+                raise self.model_info
+            return self.model_info
         if path.startswith("/key/list?"):
             return {"keys": self.keys}
         if path == "/team/list":
@@ -76,6 +81,105 @@ class ModelDiscoveryTests(unittest.TestCase):
         self.assertEqual(payload["rpm_limit"], 20)
         self.assertEqual(payload["tpm_limit"], 30000)
         self.assertEqual(sum(path == "/v1/models" for _, path, _ in self.pipe.calls), 3)
+
+    def test_renamed_alias_only_offers_new_name_and_preserves_existing_keys(self):
+        self.pipe.catalog = {"data": [{"id": "old-name"}, {"id": "New-Name"}]}
+        self.pipe.model_info = {"data": [
+            {"model_name": "old-name", "model_info": {}},
+            {"model_name": "New-Name", "model_info": {"pocketmind_rename_from": "old-name"}},
+        ]}
+        self.pipe.keys = [{"user_id": USER["id"], "models": ["old-name"], "key_alias": "legacy-key", "team_id": "team-1"}]
+        models = self.pipe.command("models")
+        self.assertIn("`New-Name`", models)
+        self.assertIn("Legacy models used by your active keys", models)
+        self.assertIn("`old-name`", models)
+        self.assertIn("not available", self.pipe.command("new old-name"))
+        self.assertEqual(self.generated(), [])
+        self.assertIn("Your API key for `New-Name`", self.pipe.command("new New-Name"))
+        self.assertEqual(self.generated()[0]["models"], ["New-Name"])
+        self.assertIn("old-name", self.pipe.command("list"))
+        self.assertEqual(self.pipe.keys[0]["models"], ["old-name"])
+        self.assertFalse(any(path == "/key/delete" for _, path, _ in self.pipe.calls))
+
+    def test_legacy_names_are_visible_only_to_their_active_key_owners(self):
+        self.pipe.catalog = {"data": [{"id": "old-name"}, {"id": "New-Name"}]}
+        self.pipe.model_info = {"data": [{"model_name": "New-Name", "model_info": {"pocketmind_rename_from": "old-name"}}]}
+        self.pipe.keys = [
+            {"user_id": "another-user", "models": ["old-name"], "key_alias": "someone-elses-key"},
+            {"user_id": USER["id"], "models": ["New-Name"], "key_alias": "current-key"},
+        ]
+        result = self.pipe.command("models")
+        self.assertIn("New-Name", result)
+        self.assertNotIn("old-name", result)
+        self.assertNotIn("someone-elses-key", result)
+        self.pipe.keys.append({"user_id": USER["id"], "models": ["old-name"], "key_alias": "legacy-key", "expires": "2999-01-01T00:00:00Z"})
+        self.assertIn("old-name", self.pipe.command("models"))
+        self.assertIn("not available", self.pipe.command("new old-name"))
+        self.assertEqual(self.generated(), [])
+        self.pipe.keys.pop()
+        self.assertNotIn("old-name", self.pipe.command("models"))
+
+    def test_expired_blocked_or_invalid_expiry_keys_do_not_reveal_legacy_names(self):
+        self.pipe.catalog = {"data": [{"id": "old-name"}, {"id": "New-Name"}]}
+        self.pipe.model_info = {"data": [{"model_name": "New-Name", "model_info": {"pocketmind_rename_from": "old-name"}}]}
+        for status in [{"expires": "2000-01-01T00:00:00Z"}, {"blocked": True}, {"expires": "invalid"}, {"expires": "2000-01-01T00:00:00"}]:
+            with self.subTest(status=status):
+                self.pipe.keys = [{"user_id": USER["id"], "models": ["old-name"], "key_alias": "inactive", **status}]
+                self.assertNotIn("old-name", self.pipe.command("models"))
+                self.assertIn("old-name", self.pipe.command("list"))
+
+    def test_manual_current_allowlist_can_still_show_owned_legacy_keys_without_issuing_old_scopes(self):
+        self.pipe.valves.auto_discover_models = False
+        self.pipe.valves.allowed_models = "New-Name"
+        self.pipe.model_info = {"data": [{"model_name": "New-Name", "model_info": {"pocketmind_rename_from": "old-name"}}]}
+        self.pipe.keys = [{"user_id": USER["id"], "models": ["old-name"], "key_alias": "legacy"}]
+        self.assertIn("old-name", self.pipe.command("models"))
+        self.pipe.valves.allowed_models = ""
+        self.assertIn("Legacy models", self.pipe.command("models"))
+        self.assertIn("No models are enabled", self.pipe.command("new old-name"))
+        self.assertEqual(self.generated(), [])
+
+    def test_chained_renames_hide_all_ancestors_but_not_unrelated_aliases(self):
+        self.pipe.catalog = {"data": [{"id": name} for name in ["A", "B", "C", "independent"]]}
+        self.pipe.model_info = {"data": [
+            {"model_name": "A", "model_info": {}},
+            {"model_name": "B", "model_info": {"pocketmind_rename_from": "A"}},
+            {"model_name": "C", "model_info": {"pocketmind_rename_from": "B"}},
+            {"model_name": "independent", "model_info": {}},
+        ]}
+        self.assertEqual(self.pipe._models(), ["C", "independent"])
+        self.pipe.catalog["data"] = [{"id": "A"}, {"id": "independent"}]
+        self.assertEqual(self.pipe._models(), ["A", "independent"])
+
+    def test_manual_allowlist_also_hides_legacy_names_without_expanding_permissions(self):
+        self.pipe.valves.auto_discover_models = False
+        self.pipe.valves.allowed_models = "old-name,New-Name"
+        self.pipe.model_info = {"data": [{"model_name": "New-Name", "model_info": {"pocketmind_rename_from": "old-name"}}]}
+        self.assertEqual(self.pipe._models(), ["New-Name"])
+        self.pipe.valves.allowed_models = "old-name"
+        self.assertEqual(self.pipe._models(), [])
+        self.assertIn("No models are enabled", self.pipe.command("new old-name"))
+        self.assertEqual(self.generated(), [])
+
+    def test_rename_metadata_failure_never_exposes_legacy_names_or_issues_keys(self):
+        for metadata in [RuntimeError("unavailable"), {}, {"data": None}, {"data": ["invalid"]},
+                         {"data": [{"model_name": "new", "model_info": {"pocketmind_rename_from": 42}}]}]:
+            with self.subTest(metadata=metadata):
+                self.pipe.model_info = metadata
+                self.assertIn("could not be completed", self.pipe.command("new default-general"))
+                self.assertEqual(self.generated(), [])
+        self.pipe.keys = [{"user_id": USER["id"], "models": ["old-name"], "key_alias": "legacy-key", "team_id": "team-1"}]
+        self.assertIn("old-name", self.pipe.command("list"))
+        self.assertIn("Revoked 1 key", self.pipe.command("revoke legacy-key"))
+
+    def test_legacy_key_rotation_keeps_original_scope_without_discovery(self):
+        self.pipe.catalog = RuntimeError("unavailable")
+        self.pipe.model_info = RuntimeError("unavailable")
+        self.pipe.keys = [{"user_id": USER["id"], "models": ["old-name"],
+                           "key_alias": "legacy-key", "team_id": "team-1", "metadata": {"label": "editor"}}]
+        self.assertIn("Your API key for `old-name`", self.pipe.command("rotate legacy-key"))
+        self.assertEqual(self.generated()[0]["models"], ["old-name"])
+        self.assertFalse(any(path in ("/v1/models", "/model/info") for _, path, _ in self.pipe.calls))
 
     def test_removed_model_cannot_receive_new_key(self):
         self.pipe.catalog = {"data": [{"id": "custom-other"}]}

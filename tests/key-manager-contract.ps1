@@ -22,6 +22,8 @@ if (Test-Path -LiteralPath $pipePath) {
         '"models": [model]',                         # every key is limited to exactly one model
         'self._pick_model(',                         # the model must come from discovery or the manual allowlist
         'auto_discover_models',
+        'pocketmind_rename_from',
+        'self._litellm("GET", "/model/info")',
         'self._litellm("GET", "/v1/models")',         # includes database-backed Model Lab aliases
         'members_with_roles',                        # the key's team comes from LiteLLM team membership
         'get_super_admin_user',                      # mirrored groups are owned by an administrator
