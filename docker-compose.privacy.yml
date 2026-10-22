@@ -1,0 +1,60 @@
+# Apply AFTER the cpu/nvidia files and docker-compose.proxy.yml.
+# Pre-download images, Ollama models and Open WebUI embedding/tokenizer caches first.
+# Backend containers have no external network. nginx has a separate edge network for ingress;
+# Infra must deny its egress, host egress and client/IDE egress separately. See docs/privacy.md.
+services:
+  postgres:
+    ports: !override ["127.0.0.1:5432:5432"]
+
+  ollama:
+    ports: !override ["127.0.0.1:11434:11434"]
+
+  litellm:
+    ports: !override ["127.0.0.1:4000:4000"]
+
+  prometheus:
+    ports: !override ["127.0.0.1:9090:9090"]
+
+  grafana:
+    ports: !override ["127.0.0.1:3001:3000"]
+
+  model-init:
+    # Inspect local weights only. Never pull automatically while serving sensitive workloads.
+    command:
+      - >
+        ollama show ${OLLAMA_MODEL} >/dev/null &&
+        ollama show $${OLLAMA_OCR_MODEL} >/dev/null &&
+        echo "Default model weights are available locally."
+
+  open-webui:
+    ports: !override ["127.0.0.1:3000:8080"]
+    environment:
+      OFFLINE_MODE: "true"
+      HF_HUB_OFFLINE: "1"
+      TRANSFORMERS_OFFLINE: "1"
+      RAG_EMBEDDING_MODEL_AUTO_UPDATE: "false"
+      RAG_RERANKING_MODEL_AUTO_UPDATE: "false"
+      WHISPER_MODEL_AUTO_UPDATE: "false"
+      # Pin application settings to environment defaults instead of saved external providers/tools.
+      # Accounts, Workspace Model grants, chats and Function Valves remain in their own tables.
+      ENABLE_PERSISTENT_CONFIG: "false"
+      ENABLE_SIGNUP: "false"
+      OPENAI_API_BASE_URLS: http://litellm:4000/v1
+      OPENAI_API_KEYS: ${LITELLM_MASTER_KEY}
+      TASK_MODEL_EXTERNAL: default-general
+      ENABLE_CODE_EXECUTION: "false"
+      ENABLE_CODE_INTERPRETER: "false"
+      ENABLE_COMMUNITY_SHARING: "false"
+      ENABLE_USER_WEBHOOKS: "false"
+      TOOL_SERVER_CONNECTIONS: "[]"
+      TERMINAL_SERVER_CONNECTIONS: "[]"
+      CUSTOM_NAME: ""
+
+  nginx:
+    networks: [ai-net, privacy-edge]
+
+networks:
+  ai-net:
+    internal: true
+  privacy-edge:
+    driver: bridge

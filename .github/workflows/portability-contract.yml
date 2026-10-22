@@ -40,6 +40,9 @@ jobs:
       - name: Model alias behavior
         shell: pwsh
         run: ./tests/model-lab-behavior.ps1
+      - name: Privacy script contract
+        shell: pwsh
+        run: ./tests/privacy-contract.ps1
       - name: Provisioning contract
         shell: pwsh
         run: ./tests/provision-contract.ps1
@@ -70,3 +73,8 @@ jobs:
       - name: Proxy contract
         shell: pwsh
         run: ./tests/proxy-contract.ps1
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Privacy topology and Compose checks
+        run: python -m unittest discover -s tests -p 'test_privacy.py' -v

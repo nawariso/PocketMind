@@ -214,6 +214,25 @@ function Get-PocProxySettings {
     }
 }
 
+function Test-PocPrivacyEnabled {
+    $value = $env:PRIVACY_MODE
+    if ([string]::IsNullOrWhiteSpace($value) -and (Test-Path -LiteralPath (Join-Path $script:PocRepoRoot '.env') -PathType Leaf)) {
+        $value = (Get-PocEnv)['PRIVACY_MODE']
+    }
+    return ([string]$value).Trim().ToLowerInvariant() -in @('true', '1', 'yes')
+}
+
+function Get-PocPrivacyComposeFile {
+    param([ValidateSet('cpu', 'native', 'nvidia')] [string] $Profile)
+    if ($Profile -eq 'native') {
+        throw 'PRIVACY_MODE requires container Ollama (cpu/nvidia); host Ollama is outside Docker network isolation.'
+    }
+    if (-not (Test-PocProxyEnabled)) {
+        throw 'PRIVACY_MODE requires PROXY_ENABLED=true so nginx can serve the isolated backend.'
+    }
+    return Join-Path $script:PocRepoRoot 'docker-compose.privacy.yml'
+}
+
 function Get-PocProxyComposeFile {
     return Join-Path $script:PocRepoRoot 'docker-compose.proxy.yml'
 }
@@ -232,6 +251,7 @@ function Invoke-PocCompose {
     }
     # One switch for every script: a later run without the overlay would otherwise remove the proxy as an orphan.
     if (Test-PocProxyEnabled) { $dockerArguments += @('-f', (Get-PocProxyComposeFile)) }
+    if (Test-PocPrivacyEnabled) { $dockerArguments += @('-f', (Get-PocPrivacyComposeFile -Profile $Profile)) }
     $dockerArguments += $Arguments
     & docker @dockerArguments
     if ($LASTEXITCODE -ne 0) {

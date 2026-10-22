@@ -12,6 +12,10 @@ model_list:
       supports_vision: true
 
 litellm_settings:
+  telemetry: false
+  turn_off_message_logging: true
+  redact_messages_in_exceptions: true
+  expose_router_debug_in_errors: false
   success_callback:
     - prometheus
 
