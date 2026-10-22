@@ -2,9 +2,11 @@
 
 ## Security posture
 
-PocketMind is a local, single-host stack. Its default network policy is localhost-only: Compose-published ports bind to `127.0.0.1`. Container-to-container traffic uses the private `ai-net` network.
+PocketMind is a local, single-host stack. The Docker CPU/NVIDIA base file publishes backend ports on `0.0.0.0` for direct server access and requires network access restrictions. The native profile and Privacy mode remain localhost-only for backend ports (`127.0.0.1`). Container-to-container traffic uses the private `ai-net` network.
 
 ## Credentials
+
+See [local data and privacy controls](privacy.md) for the default cloud/telemetry settings, the opt-in isolated Docker serving mode, offline-cache preparation, verification and remaining host/client/firewall requirements. The ordinary `ai-net` bridge is not an egress restriction; localhost-only publishing controls ingress, not outbound traffic.
 
 | Credential | Authority | Intended holder/use | Never expose to |
 |---|---|---|---|
@@ -40,12 +42,12 @@ For a shared pilot on an internal network use the nginx proxy described below. Q
 
 ## Shared pilot proxy
 
-The optional nginx proxy (ADR 0005) is the only component meant to listen beyond `127.0.0.1`:
+Use the optional nginx proxy (ADR 0005) for user-facing access. In Privacy mode it is the only service published beyond loopback:
 
-- it publishes Open WebUI and, on a second port, only the LiteLLM inference endpoints; the administration UI and APIs of LiteLLM, Grafana, Prometheus, PostgreSQL, and Ollama stay on loopback;
+- it publishes Open WebUI and, on a second port, only the LiteLLM inference endpoints; the administration UI and APIs of LiteLLM, Grafana, Prometheus, PostgreSQL, and Ollama stay on loopback when Privacy mode is active. Ordinary Docker mode may expose these directly and needs separate source restrictions;
 - it listens on every interface (`0.0.0.0`) by default; set `PROXY_BIND_ADDRESS` to the LAN IP to use one interface, or `127.0.0.1` to keep it local, and enable it only on a host whose network you trust;
 - it speaks plain HTTP, so passwords and API keys are readable by anyone who can observe the network: use it only on a trusted internal network with test data, never on the internet, and add HTTPS before real use;
-- limit callers with `allow`/`deny` in `nginx/local/*.conf`, not with the host firewall: on Linux the ports Docker publishes can bypass `ufw`, and on Docker Desktop (observed on macOS) nginx sees every client as the VM gateway, so address rules and per-address rate limits cannot distinguish clients there;
+- limit callers with `allow`/`deny` in `nginx/local/*.conf` and coordinate Docker-aware firewall policy with Infra: on Linux the ports Docker publishes can bypass `ufw`, and on Docker Desktop (observed on macOS) nginx sees every client as the VM gateway, so address rules and per-address rate limits cannot distinguish clients there;
 - the API port rate-limits requests per client address (30 per second, burst 60) and Open WebUI's sign-in/session endpoints are limited to 2 per second (burst 10) to slow password guessing and floods; keys themselves are long random values;
 - Open WebUI holds the LiteLLM master key and would forward arbitrary paths upstream with it if its OpenAI passthrough were on, so `ENABLE_OPENAI_API_PASSTHROUGH` is pinned to `false` in the compose files and asserted by `tests/proxy-contract.ps1`. Through the Open WebUI port a signed-in user then gets 403 for `/openai/key/generate`, `/openai/key/list`, `/openai/model/new`, `/openai/team/list`, and `/openai/openapi.json` (tested with a throwaway non-admin account). Open WebUI's own OpenAI-compatible chat routes (`/openai/chat/completions`, `/api/chat/completions`) stay available to signed-in users with their session token, within the models they may see; those calls reach LiteLLM with Open WebUI's key, so a personal key's rate and concurrency limits do not apply to them;
 - keep sign-up closed and use strong secrets in `.env`, because the master key is the only protection of everything the proxy does not expose.
@@ -57,10 +59,10 @@ The optional nginx proxy (ADR 0005) is the only component meant to listen beyond
 ## Accounts and sign-up
 
 - Open WebUI sign-up is closed; administrators add accounts. Keep it closed unless account creation is otherwise controlled. Check it with `curl -s http://localhost:3000/api/config` (`enable_signup` must be false) before sharing the server; the setting lives in Open WebUI's database and an administrator can turn it back on.
-- On a new installation the first visitor becomes administrator. Set `WEBUI_ADMIN_EMAIL` and `WEBUI_ADMIN_PASSWORD` in `.env` before the first start (the prerequisite check refuses short or placeholder passwords), or keep the proxy on `127.0.0.1` until the account exists.
+- On a new installation without a preconfigured administrator, the first registrant becomes administrator. Set `WEBUI_ADMIN_EMAIL` and `WEBUI_ADMIN_PASSWORD` in `.env` before the first start (the prerequisite check refuses short or placeholder passwords), or keep the proxy on `127.0.0.1` until the account exists.
 - Password sign-up checks only the email format. It cannot restrict email domains and does not verify that the person owns the address. Team attribution in the API Key Manager trusts the account email, so unverified sign-up would let someone claim another person's team by using their address.
 - Domain restriction exists for SSO (`OAUTH_ALLOWED_DOMAINS`) and, with an identity provider, also proves mailbox ownership. Use SSO before opening access to many users.
-- The default user role (`pending` unless changed) decides what a newly created or SSO account may do. Changing it to `user` removes the approval step, so combine it only with controlled account creation.
+- PocketMind configures `DEFAULT_USER_ROLE=user` for initial setup (upstream Open WebUI may default to `pending`). The stored default role decides what a newly created or SSO account may do. Changing it to `user` removes the approval step, so combine it only with controlled account creation.
 - Open WebUI persists these settings in its database after first start; change them in Admin Panel → Settings, not in `.env`.
 
 ## Least privilege
@@ -86,6 +88,26 @@ Pilot users create their own LiteLLM key from the Open WebUI model "API Key Mana
 - deleting a LiteLLM team also deletes every key attributed to it, so move or recreate keys before removing a team (`unassigned` included);
 - revoke a user's access by deleting their key in LiteLLM (Virtual Keys) or with `revoke` by that user.
 
+## Model approval and execution boundaries
+
+A local model produces outputs through the inference engine. Network requests, file reads and shell commands occur through the serving software or attached tools; model outputs can still cause unsafe actions if a client executes them. Untrusted documents can contain prompt injection. Runtime/parser vulnerabilities and unreviewed custom code are additional risks, so local weights are not a security certification.
+
+Before adding an organizational model:
+
+1. Approve the source publisher, license, exact artifact revision/hash and conversion provenance. Preserve an approval record outside transient download logs. Review capabilities and memory fit using [model management](models/manage-models.md).
+2. Scan container images/dependencies and supported artifact formats. Verify scanner coverage explicitly; do not claim a scanner for pickle or safetensors validates GGUF. A clean scan does not prove absence of a backdoor or unsafe generated instructions.
+3. Keep remote code loading disabled. Review Functions, Tools, MCP servers and IDE extensions as executable dependencies. Permit only required file scopes, API destinations and commands; require approval for consequential tool actions.
+4. Test synthetic chat, tool calls, malicious document instructions, cross-user isolation and outbound-deny behavior in the actual serving path. Repeat when models, images or tools change.
+5. Retain Infra egress/DNS policy and monitoring even after passing application tests. See [Privacy mode](privacy.md) for the serving boundary and controlled download cycle.
+
+## Implemented controls versus deployment work
+
+Base Compose disables the cloud/reporting/integration features listed in [Privacy controls](privacy.md). The optional privacy overlay adds internal backend networking and offline settings; it takes effect only when deployed with prepared caches. Editing this repository does not activate it on an existing server.
+
+Backend-wide `cap_drop` and `no-new-privileges` hardening has not been added or runtime-validated. nginx has its own restricted capability/read-only configuration; that does not establish backend confinement. Additional backend hardening should be a separately tested change, checking GPU device access, startup ownership, healthchecks and writable data paths before rollout.
+
+IDE file/terminal/network permissions and auto-approve policy are endpoint configuration and have not been verified by repository changes. Infra HTTPS, outbound policy, secret management and retention are likewise deployment work. Use [server updates](server-update.md), [privacy verification](privacy.md#verification-scope) and [performance checks](tuning.md#privacy-and-performance) to record what was actually applied and tested.
+
 ## Logs and screenshots
 
 Treat environment dumps, container inspection, request payloads, browser screenshots, and Postman exports as potentially secret-bearing. Redact bearer tokens, passwords, cookies, database URLs, and tunnel credentials before sharing.
@@ -104,7 +126,7 @@ If a credential may have leaked:
 
 ## Security verification checklist
 
-- All published Compose addresses remain `127.0.0.1`.
+- For Privacy mode, backend bindings remain `127.0.0.1`; for ordinary CPU/NVIDIA mode, restrict the directly published `0.0.0.0` backend ports to approved source networks.
 - Open WebUI direct Ollama and OpenAI passthrough remain disabled as configured.
 - Public signup is not left open.
 - OCR Built-in Tools remains off.

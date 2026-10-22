@@ -110,7 +110,7 @@ Then test as a normal person, not as the administrator (an administrator bypasse
 
 1. As the administrator, add a test user: Admin Panel → Users → +, role `user`.
 2. Sign in as that user in a private window. The model list shows `default-general`, `default-ocr`, and "API Key Manager".
-3. Chat with `default-general`; send a document image to `default-ocr` with the prompt from the README.
+3. Chat with `default-general`; send a document image to `default-ocr` with the prompt in [Open WebUI and OCR](open-webui.md#thai-and-english-ocr-with-typhoon).
 4. Select "API Key Manager", type `models`, then `new default-general`. Copy the key and call the API from another machine:
 
    ```text
@@ -140,12 +140,11 @@ Testing from a second device matters: every check made while building this ran o
 - Chat: `http://<ip>:8480`, sign in with the account the administrator created.
 - API: pick "API Key Manager" in the model list and type `models`, then `new <model>` (add `as <name>` to label a key). Each key works for one model, expires, and is shown once: copy it at once and delete that chat. `list` shows their keys, `rotate <alias>` replaces one, `revoke <alias>` removes one.
 - API base URL: `http://<ip>:8481/v1` (OpenAI-compatible).
-- One request is answered at a time: when several people ask together, the others wait in a queue.
+- The default parallel setting is one request per loaded model; server tuning can change it. Capacity-test before increasing concurrency; see [Tuning](tuning.md).
 
 ## 7. Change or update later
 
-- **Re-run provisioning** after any change to `.env`: `./scripts/provision.sh --AdminEmail <same email>`. It keeps data and changes only what differs.
-- **Update the code**: back up first, `git pull`, compare your `.env` with `.env.example` (new variables appear there; your file is never changed for you), run `./scripts/provision.sh`. Read what the pull changed. Open WebUI is pinned to a digest and moves only when the pin is changed on purpose (an older `.env` keeps its own `OPEN_WEBUI_IMAGE`; see the runbook).
+- **Apply configuration or Git updates**: use [Updating a server](server-update.md). It covers `.env` preservation, one-time migration of local YAML tuning, aliases/keys, Function installation, normal/privacy file sets and verification. Do not copy `.env.example` over a running server's `.env`.
 - **Move Open WebUI to another build**: see "Move Open WebUI to another build" in the [runbook](operations-runbook.md#move-open-webui-to-another-build).
 - **Rotate the master key or any secret**: follow the runbook; Open WebUI, Prometheus, and Grafana keep their own copies.
 - **Stop**: `docker compose <profile files> -f docker-compose.proxy.yml down`. Never add `-v` unless you mean to delete all data.
@@ -159,7 +158,7 @@ Testing from a second device matters: every check made while building this ran o
 | "First administrator" refusal | Set `WEBUI_ADMIN_EMAIL` and `WEBUI_ADMIN_PASSWORD` in `.env`, or `PROXY_BIND_ADDRESS=127.0.0.1` until the account exists. |
 | Image or model download fails | The network blocks a registry (section 2). |
 | Users see only "API Key Manager" | The models have no access entry: run `configure-open-webui.ps1`. |
-| Chat or API is slow | One request at a time; check `ollama ps` and the [runbook](operations-runbook.md). |
+| Chat or API is slow | Check actual GPU placement, queueing and [tuning](tuning.md); a UI streaming failure needs [troubleshooting](troubleshooting.md). |
 
 ## Checklist
 

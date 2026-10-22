@@ -33,7 +33,7 @@ $config = Get-Content -Raw -LiteralPath (Join-Path $repoRoot 'litellm/config.yam
 Assert-True -Condition ($config.Contains('store_model_in_db: true')) `
     -Message 'LiteLLM must persist Model Lab aliases in its database'
 
-$readme = Get-Content -Raw -LiteralPath (Join-Path $repoRoot 'README.md')
+$readme = Get-Content -Raw -LiteralPath (Join-Path $repoRoot 'docs/models/manage-models.md')
 foreach ($term in @(
     '## Model Lab: try another Ollama model without editing config',
     '### Model Lab prerequisites',
@@ -53,7 +53,7 @@ foreach ($term in @(
     'powershell -ExecutionPolicy Bypass -File .\scripts\model-lab.ps1',
     'No prefix is required'
 )) {
-    Assert-True -Condition ($readme.Contains($term)) -Message "README is missing Model Lab guidance: $term"
+    Assert-True -Condition ($readme.Contains($term)) -Message "Model management guide is missing guidance: $term"
 }
 
 $verifyScript = Get-Content -Raw -LiteralPath (Join-Path $repoRoot 'scripts/verify-stack.ps1')

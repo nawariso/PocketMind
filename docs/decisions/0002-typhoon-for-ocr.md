@@ -19,7 +19,7 @@ vision=true
 builtin_tools=false
 ```
 
-Use temperature 0.1 and the extraction prompt documented in the root README. Keep context 8192 for observed image-prompt needs.
+Use temperature 0.1 and the extraction prompt in [Open WebUI and OCR](../open-webui.md#thai-and-english-ocr-with-typhoon). Keep context 8192 for observed image-prompt needs.
 
 ## Consequences
 

@@ -23,26 +23,20 @@ foreach ($scriptFile in $scriptFiles) {
 }
 
 $readme = Get-Content -Raw -LiteralPath (Join-Path $repoRoot 'README.md')
+$gettingStarted = Get-Content -Raw -LiteralPath (Join-Path $repoRoot 'docs/getting-started.md')
+foreach ($term in @('Windows 11', 'macOS', 'Ubuntu', '```mermaid', 'flowchart LR')) {
+    Assert-True -Condition ($readme.Contains($term)) -Message "README is missing overview guidance: $term"
+}
 foreach ($term in @(
-    'Windows 11',
-    'macOS',
-    'Ubuntu',
     '-Profile auto',
     '-Profile nvidia',
     '-Profile native',
-    '-Profile cpu'
-)) {
-    Assert-True -Condition ($readme.Contains($term)) -Message "README is missing portability guidance: $term"
-}
-
-foreach ($term in @(
-    '```mermaid',
-    'flowchart LR',
+    '-Profile cpu',
     'pwsh ./scripts/setup.ps1 -Profile auto -Pull',
     'powershell -ExecutionPolicy Bypass -File .\scripts\setup.ps1 -Profile auto -Pull',
     'recommended end-to-end validation; it is not required to start the stack'
 )) {
-    Assert-True -Condition ($readme.Contains($term)) -Message "README is missing one-command setup guidance: $term"
+    Assert-True -Condition ($gettingStarted.Contains($term)) -Message "Getting-started guide is missing portability/setup guidance: $term"
 }
 Assert-True -Condition ($readme -notmatch 'Browser -> Open WebUI') `
     -Message 'README still contains the old ASCII architecture diagram'

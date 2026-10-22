@@ -199,3 +199,59 @@ Check Docker and model storage before pulls. Remove unused Model Lab aliases/wei
 ## When to restore
 
 Restore only for confirmed state corruption, accidental deletion, or migration—not as the first troubleshooting step. Follow `backup-and-restore.md`; restore operations can permanently replace current users, chats, grants, models, or keys.
+
+## A port cannot be reached from another machine
+
+First check listeners on the server, then test from the affected client:
+
+```bash
+docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'
+curl --noproxy '*' --connect-timeout 5 --max-time 10 http://127.0.0.1:3000/api/config
+curl --noproxy '*' --connect-timeout 5 --max-time 10 http://127.0.0.1:8481/nginx-health
+```
+
+- Local `Connection refused` on `8480/8481` with no nginx container means the proxy is not listening; opening a firewall will not fix that. Start it with the correct overlay, as in [Network access](network-access.md).
+- A mapping such as `127.0.0.1:3000->8080` accepts local access only. Ordinary CPU/NVIDIA binding follows `BACKEND_BIND_ADDRESS`; Privacy deliberately forces loopback backends. Use the proxy or approved management access rather than changing privacy bindings.
+- Local success but remote timeout points to routing, ACL/firewall, endpoint proxy or the selected interface. Check Docker's forwarding rules with Infra as well as host firewall policy. Use the server IP, not `0.0.0.0`, in the browser.
+- PostgreSQL `5432` is a database protocol, not a web page. Native profile backend binds differ from the Docker profile.
+
+## Responses appear only after refresh / WebSocket failed
+
+If the same account works on one client but stalls on another, compare the network/client path before changing admin rights or GPU settings. Test both direct `3000` and proxy `8480` where permitted. Failure on both can be a shared network policy, endpoint proxy or browser issue.
+
+1. In the affected browser's Developer Tools → Network, inspect `/ws/socket.io/?EIO=4&transport=websocket`. Check handshake status: a successful WebSocket upgrade normally returns `101`, then frames continue. The request headers alone do not prove a successful upgrade.
+2. Ask Infra to allow WebSocket Upgrade and long-lived connections to the approved same-origin WebUI endpoint. Check endpoint/PAM/security-proxy policy, TLS inspection and idle timeouts. Compare with a working client using the same user account and a synthetic prompt.
+3. For nginx, inspect `docker logs --since 10m pocketmind-nginx`; compare direct/proxy results and timestamps with WebUI logs. Verify streaming responses are not buffered or cut off by an upstream gateway.
+4. Retest with browser extensions disabled in a permitted clean session, preserving the organization's security policy.
+
+This deployment's earlier client-specific refresh symptom was resolved by the network WebSocket policy. That is evidence for that incident, not proof every later empty response has the same cause. Avoid sharing cookies, JWTs, Authorization headers or full sensitive chat payloads in diagnostic screenshots/logs; revoke exposed sessions/keys.
+
+## Long chats stop producing final output but a new chat works
+
+A fresh chat succeeding makes history/context/output-budget pressure a useful hypothesis. It does not establish a GPU, permission or context limit diagnosis on its own. Thinking/reasoning can consume generated-token budget before a final answer appears. Follow-up suggestions may be separate task requests; they do not prove the main request returned content.
+
+1. Reproduce using synthetic conversation history and note alias, request timestamp, context/output settings and whether streaming is enabled. Inspect the failing response's `finish_reason` (LiteLLM/OpenAI) or `done_reason`, `message.content`, `message.thinking` and token counts (Ollama). `length` suggests a generation limit; `tool_calls` requires the client to execute tools and continue the conversation. Missing final content with only reasoning needs model/adapter/output-budget investigation.
+2. Inspect actual request size/history and model options, not just `.env`. Compare a short new chat, the failing history and a reduced history. Include instructions, tool schemas/results, extracted files and images in the context budget.
+3. Test the same model directly on Ollama, then LiteLLM, then WebUI/IDE to locate the layer. A short direct test does not reproduce the long-history case, but checks basic inference:
+
+   ```bash
+   curl --noproxy '*' -sS --max-time 300 http://127.0.0.1:11434/api/chat \
+     -H 'Content-Type: application/json' \
+     -d '{"model":"<physical-model-tag>","messages":[{"role":"user","content":"Reply briefly: API_OK"}],"stream":false,"options":{"num_ctx":16384,"num_predict":2048}}'
+   ```
+
+4. Check `docker exec pocketmind-ollama ollama ps` during the request, GPU memory and timestamp-aligned Ollama/LiteLLM/WebUI logs. Distinguish queue/load time, OOM, cancellation, gateway timeout and successful completion with empty content.
+5. If confirmed context pressure, shorten/summarize history or retrieve only relevant sections. If generation ends before a final answer, compare a suitable output budget and supported model-specific thinking controls. Increase context only after capacity testing at the intended concurrency; see [Tuning](tuning.md).
+
+Do not convert internal reasoning into a final user answer to conceal missing output. Preserve a small synthetic repro and check the pinned model/runtime/adapter versions when output parsing differs between layers.
+
+## IDE reads Excel but analysis is partial or empty
+
+First verify what the IDE actually sent: full cells, a preview, extracted text, a tool error, or only a path. An OpenAI-compatible API does not itself open a local workbook. The IDE needs an approved parsing/execution tool and a model that supports its tool-calling flow.
+
+- If the response requests tools, confirm the IDE executes them and sends the tool results back with matching IDs. Check terminal/file permissions, parser errors and tool timeouts before model tuning.
+- Measure token size of repeated sheets, formulas and tool output. Reduce the input to relevant sheets/ranges; aggregate/filter with local spreadsheet tooling, then send compact results. Preserve numeric types, headers and units.
+- Compare the extracted synthetic data via direct API with the IDE request. Check model alias/key scope, `max_tokens`, finish reason, reasoning-only output, provider errors and the IDE's own context/tool-iteration limits.
+- Privacy disables WebUI browser code execution/interpreter and remote tool servers. That affects tool workflows. Do not re-enable unreviewed execution to resolve a model-quality issue; approve a local tool path with restricted files/network/commands.
+
+More RAM, loaded-model slots or API rate limits do not repair a missing tool loop. See [API/IDE setup](api-access.md) and [capacity testing](tuning.md#evaluate-capacity).

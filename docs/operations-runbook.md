@@ -28,7 +28,7 @@ The verifier checks container health, PostgreSQL authentication, `default-genera
 docker ps --filter name=pocketmind-
 ```
 
-The list includes `pocketmind-nginx` only when the proxy is enabled. For profile-aware Compose rendering or lifecycle operations, prefer the repository scripts. The effective NVIDIA files are `docker-compose.yml` plus `docker-compose.nvidia.yml`; native uses `docker-compose.native-ollama.yml`.
+The list includes `pocketmind-nginx` only when the proxy is enabled. For profile-aware Compose rendering or lifecycle operations, prefer the repository scripts. The effective NVIDIA files are `docker-compose.yml` plus `docker-compose.nvidia.yml`; native uses `docker-compose.native-ollama.yml`. Manual commands also need the proxy overlay when enabled, and the privacy overlay last when active; see [file selection](server-update.md#4-apply-the-correct-file-set).
 
 ## Model inventory and placement
 
@@ -59,6 +59,8 @@ pwsh ./scripts/model-lab.ps1 remove -Alias <name> -Profile auto
 
 Use `-DeleteWeights` only after confirming no other alias uses the physical model. Model Lab refuses to delete production or shared weights.
 
+For coordinated WebUI/API naming changes, use [Rename a model](models/rename-models.md); retain legacy aliases for existing clients.
+
 ## Move Open WebUI to another build
 
 Open WebUI is pinned to a digest in `.env.example` and in both compose defaults, so it changes only when you change the pin. Pull the new build, run the tests and the API Key Manager checks (the Pipe depends on Open WebUI internals, and a key must still stay out of titles, tags, and follow-ups), then change the digest in `.env.example` and both compose defaults together; `tests/config-contract.ps1` requires a digest, not a moving tag. A `.env` made earlier keeps its own `OPEN_WEBUI_IMAGE`, so edit that line on every server. The tested digest and the reason for pinning are in the checklist.
@@ -71,7 +73,7 @@ The native profile uses an Ollama process on the host. `.env` values such as `OL
 OLLAMA_CONTEXT_LENGTH=8192 OLLAMA_KEEP_ALIVE=10m ollama serve
 ```
 
-`provision.sh --InstallPrerequisites` can set this up for you: it installs Ollama with Homebrew if missing and loads a launchd agent, `~/Library/LaunchAgents/com.pocketmind.ollama.plist`, that runs `ollama serve` at login and keeps it running with these variables (log: `~/Library/Logs/PocketMind/ollama.log`). It leaves an Ollama that already answers on port 11434 alone. To remove the agent: `launchctl bootout gui/$(id -u)/com.pocketmind.ollama` and delete the plist. Otherwise set the same variables in whichever launcher you use (desktop app, service manager, or script), then confirm `ollama list` shows `default-general` and `default-ocr` and that `ollama ps` shows context 8192. A process started by hand stops with its session, and LiteLLM then returns `Cannot connect to host host.docker.internal:11434`. Keep the default `127.0.0.1` bind; the profile never broadens it.
+`provision.sh --InstallPrerequisites` can set this up for you: it installs Ollama with Homebrew if missing and loads a launchd agent, `~/Library/LaunchAgents/com.pocketmind.ollama.plist`, that runs `ollama serve` at login and keeps it running with these variables (log: `~/Library/Logs/PocketMind/ollama.log`). It leaves an Ollama that already answers on port 11434 alone. To remove the agent: `launchctl bootout gui/$(id -u)/com.pocketmind.ollama` and delete the plist. Otherwise set the same variables in whichever launcher you use (desktop app, service manager, or script), then confirm `ollama list` shows the physical tags configured by `OLLAMA_MODEL` and `OLLAMA_OCR_MODEL` and that `ollama ps` shows context 8192. A process started by hand stops with its session, and LiteLLM then returns `Cannot connect to host host.docker.internal:11434`. Keep the default `127.0.0.1` bind; the profile never broadens it.
 
 ## Host monitoring on macOS
 
@@ -106,11 +108,7 @@ Recommended settings for this stack: Task Model → External Models → `default
 
 ## API Key Manager
 
-### Default alias rename and existing installations
-
-Fresh installations expose `default-general` and `default-ocr` instead of the former `corp-general` and `corp-ocr`. Custom aliases require no prefix; existing database-backed `lab-...` aliases keep their names and remain listable/removable. Omitting `-Alias` uses the exact Ollama model name/tag.
-
-Repository changes do not migrate a running server's state. Before applying the renamed config to an existing installation, coordinate client model names, Open WebUI Workspace Models and Task Model, saved manual API Key Manager allowlists, and virtual-key model scopes. Existing `corp-*` keys do not automatically gain access to `default-*`; issue replacement scoped keys as part of that migration. Do not restart an existing server with the new aliases until its clients and access settings are ready. The benchmark log and deployment-checklist observations retain the names used when those tests were run.
+For server-specific tuning and default-alias migration, follow [Updating a server](server-update.md) and [Tuning](tuning.md). API client setup is in [API access](api-access.md).
 
 Users create their own API keys in Open WebUI with the "API Key Manager" model (see ADR 0004). An administrator installs or updates it:
 
@@ -120,7 +118,7 @@ pwsh ./scripts/install-key-manager.ps1 -AdminEmail <admin email> -PublicModels d
 
 The script prompts for the admin password (or reads `OPENWEBUI_ADMIN_PASSWORD`), registers the Pipe, and keeps existing Valves when updating. `-PublicModels` grants selected models to every signed-in user and skips models that already have an entry; `-GroupId` limits who sees the key manager. Adjust model list, expiry, rate limits, concurrency, key count, and sync interval in Admin Panel → Functions → API Key Manager → Valves.
 
-Model discovery is automatic by default (`auto_discover_models=true`): `models` and `new` fetch the current aliases from LiteLLM's `/v1/models`, including database-backed Model Lab aliases. Registering a model in LiteLLM therefore makes it available for API key requests without editing the function or its Valves. This catalog is read with the service's master key, not filtered by Open WebUI model access grants; only register models intended for self-service API use. LiteLLM team restrictions still apply to the generated keys. To retain an explicit administrator allowlist, set `auto_discover_models=false` and edit `allowed_models`; an empty manual list denies new keys. Discovery failures do not fall back to the old list or issue unrestricted keys. Listing and revoking existing keys does not require model discovery.
+Model discovery is automatic by default (`auto_discover_models=true`): `models` and `new` fetch the current aliases from LiteLLM's `/v1/models`, including database-backed Model Lab aliases. Registering a model in LiteLLM therefore makes it available for API key requests without editing the function or its Valves. v0.6.1+ filters legacy aliases marked by the [rename script](models/rename-models.md) from new-key choices. `models` shows a legacy name only to callers with their own active key scoped to it; other users see current names only. Old clients keep their existing scopes. This catalog is read with the service's master key, not filtered by Open WebUI model access grants; only register models intended for self-service API use. LiteLLM team restrictions still apply to the generated keys. To retain an explicit administrator allowlist, set `auto_discover_models=false` and edit `allowed_models`; an empty manual list denies new keys. Discovery failures do not fall back to the old list or issue unrestricted keys. Listing and revoking existing keys does not require model discovery.
 
 To update an existing server, copy the updated `openwebui/functions/api_key_manager.py` and run `pwsh ./scripts/install-key-manager.ps1 -AdminEmail <admin email>` from the repository on that server. No Compose restart is needed. Existing Valves are preserved; the new discovery Valve defaults to true, so a previously saved `allowed_models` list is ignored unless discovery is explicitly disabled. Confirm the setting in Admin Panel → Functions → API Key Manager → Valves and type `models` in a new chat. Discovery changes which models can receive **new** keys; every key still permits only its selected model and existing keys are unchanged.
 
@@ -130,7 +128,7 @@ Operations:
 - Teams are managed only in LiteLLM (add members by email). `sync` as an administrator mirrors teams to Open WebUI groups and lists keys whose owner left the team; those users run `rotate <alias>`.
 - Deleting a LiteLLM team deletes its keys, including the `unassigned` team that holds keys of users in no team.
 - After every Open WebUI upgrade, create a key in a test chat and confirm it does not appear in the chat title, tags, or follow-ups.
-- Users call LiteLLM directly. Other machines reach it only through the nginx proxy (next section), which forwards just the inference paths and never `/ui`, `/key`, or `/model`; plain HTTP is for trusted internal networks until HTTPS is added.
+- Users call LiteLLM directly. For user traffic, use the nginx proxy (next section), which forwards just the inference paths and never `/ui`, `/key`, or `/model`; plain HTTP is for trusted internal networks until HTTPS is added.
 
 ## Usage and cost comparison
 
@@ -194,11 +192,11 @@ Container model placement:
 docker exec pocketmind-ollama ollama ps
 ```
 
-If memory pressure is high, stop sending requests, wait for `OLLAMA_KEEP_ALIVE`, or stop an unused model with `ollama stop <exact-tag>`. Keep the configured one-model/one-parallel-request limits.
+If memory pressure is high, stop sending requests, wait for `OLLAMA_KEEP_ALIVE`, or stop an unused model with `ollama stop <exact-tag>`. Use the measured context/concurrency limits in [Tuning](tuning.md); larger limits are not automatically faster.
 
 ## Temporary public UI
 
-Follow the Quick Tunnel section in the root README. Confirm the tunnel targets Open WebUI only, obtain the current URL from container logs, verify authentication, and remove the tunnel after testing. A Quick Tunnel URL is temporary and must not be treated as production ingress.
+Follow [Temporary public tests](network-access.md#temporary-public-test-with-cloudflare-quick-tunnel). Confirm the tunnel targets Open WebUI only, obtain the current URL from container logs, verify authentication, and remove the tunnel after testing. A Quick Tunnel URL is temporary and must not be treated as production ingress.
 
 ## Routine operational checklist
 
@@ -225,7 +223,7 @@ Follow the Quick Tunnel section in the root README. Confirm the tunnel targets O
 
 If public exposure, credential leakage, runaway memory use, or unsafe behavior is suspected:
 
-1. Stop/remove the Quick Tunnel first, and take the shared proxy offline (set `PROXY_ENABLED=false` or `PROXY_BIND_ADDRESS=127.0.0.1` in `.env` and run `setup.ps1`, or `docker rm -f pocketmind-nginx` for an immediate stop). The proxy is the only service listening beyond `127.0.0.1`.
+1. Stop/remove the Quick Tunnel first, and take the shared proxy offline (set `PROXY_ENABLED=false` or `PROXY_BIND_ADDRESS=127.0.0.1` in `.env` and run `setup.ps1`, or `docker rm -f pocketmind-nginx` for an immediate stop). The ordinary CPU/NVIDIA stack may also expose backend ports directly; block those paths through Docker-aware Infra controls or stop the affected backends. Changing `.env` alone does not stop listeners.
 2. Stop request-generating clients.
 3. Stop the affected service or the stack with the correct Compose profile.
 4. Preserve logs and database/UI backups before destructive cleanup.

@@ -6,10 +6,28 @@ This directory separates current operational knowledge from historical implement
 
 Use these documents for the running system:
 
+### Installation and server changes
+
+- [Getting started](getting-started.md) — platform support, profiles, prerequisites and manual installation.
+- [Updating a server](server-update.md) — preserve `.env`/volumes, migrate YAML tuning, pull safely, apply aliases/Functions and verify.
+- [Tuning](tuning.md) — two-L40S baseline, context/concurrency/GPU tradeoffs, commands and workload measurements.
+
+### User access and models
+
+- [Network access](network-access.md) — service ports, firewall handoff, proxy, direct access, DBeaver and temporary test tunnels.
+- [Rename a model](models/rename-models.md) — change WebUI/API naming while retaining old aliases and key scopes.
+- [Model management](models/manage-models.md) — Model Lab commands, arbitrary aliases, Hugging Face artifact compatibility and model access.
+- [API access](api-access.md) — automatic model discovery, scoped keys, IDE setup, tools and rate-limit boundaries.
+- [Open WebUI](open-webui.md) — accounts, regular-user grants, Task Model and the exact OCR prompt.
+- [Monitoring](monitoring.md) — dashboards, exporters, benchmark and usage interpretation.
+
+### Operations, privacy and recovery
+
 - [Architecture](architecture.md) — components, request paths, profiles, persistence, and trust boundaries.
 - [Provisioning guide](provisioning-guide.md) — the ordered steps to bring up a new server, how to check it, what to do by hand afterwards, and a checklist.
 - [Operations runbook](operations-runbook.md) — startup, verification, model lifecycle, native macOS Ollama and host monitoring, master-key rotation, API Key Manager, shared pilot proxy, usage reports, diagnostics, and emergency procedures.
-- [Security](security.md) — credentials, localhost-only policy, the shared pilot proxy, accounts and sign-up, API keys, tunnels, and incident response.
+- [Security](security.md) — credentials, backend exposure policy, the shared pilot proxy, accounts and sign-up, API keys, tunnels, and incident response.
+- [Local data and privacy controls](privacy.md) — cloud/reporting defaults, isolated serving mode, preparation and infrastructure requirements, verification and limits.
 - [Backup and restore](backup-and-restore.md) — what state matters and how to preserve or restore it.
 - [Troubleshooting](troubleshooting.md) — symptom-oriented diagnosis and recovery.
 - [Server deployment checklist](server-deployment-checklist.md) — what was verified for a shared pilot on a server, what must be done first, and the known limits.

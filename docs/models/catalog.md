@@ -9,6 +9,8 @@ This is the current internal registry of production and materially evaluated mod
 | `default-general` | `qwen3:4b-instruct-2507-q4_K_M` | General Thai/text, reasoning, coding, tools | completion, tools, thinking | 8192 | Q4_K_M | Production |
 | `default-ocr` | `scb10x/typhoon-ocr1.5-3b` | Thai/English document OCR | completion, vision; no tools | 8192 | Q4_K_M | Production |
 
+The context values above are repository defaults, not an enforced limit for every server. Server `.env` and request/model settings can differ; confirm loaded values with `ollama ps` as described in [Tuning](../tuning.md).
+
 ## `default-general`
 
 - Physical model: `qwen3:4b-instruct-2507-q4_K_M`
@@ -27,7 +29,7 @@ This is the current internal registry of production and materially evaluated mod
 - Purpose: constrained document transcription, not general chat or free-form VQA.
 - Required Open WebUI capability metadata: `vision=true`, `builtin_tools=false`.
 - Recommended temperature: 0.1.
-- Use the extraction prompt documented in the root README.
+- Use the extraction prompt in [Open WebUI and OCR](../open-webui.md#thai-and-english-ocr-with-typhoon).
 - Human-review important output. A successful fixture does not make generative OCR deterministic.
 
 ## Evaluated and Removed

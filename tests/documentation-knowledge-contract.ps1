@@ -10,6 +10,16 @@ function Assert-True {
 
 $requiredDocs = @(
     'docs/README.md',
+    'docs/getting-started.md',
+    'docs/server-update.md',
+    'docs/tuning.md',
+    'docs/privacy.md',
+    'docs/network-access.md',
+    'docs/open-webui.md',
+    'docs/api-access.md',
+    'docs/monitoring.md',
+    'docs/models/manage-models.md',
+    'docs/models/rename-models.md',
     'docs/architecture.md',
     'docs/operations-runbook.md',
     'docs/security.md',
@@ -97,12 +107,24 @@ if (Test-Path -LiteralPath (Join-Path $repoRoot 'docs/architecture.md')) {
     }
 }
 
-if (Test-Path -LiteralPath (Join-Path $repoRoot 'README.md')) {
-    $readme = Get-Content -Raw -LiteralPath (Join-Path $repoRoot 'README.md')
-    foreach ($term in @('WEBUI_ADMIN_EMAIL', 'server-deployment-checklist.md', 'usage-report.ps1', 'install-key-manager.ps1', 'Task Model', 'OLLAMA_CONTEXT_LENGTH=8192', 'PROXY_ENABLED=true', 'nginx/local', 'Shared pilot access with the nginx proxy', 'http://localhost:8481/v1', 'docker-compose.proxy.yml', 'Provision a server with one command', 'docs/provisioning-guide.md', 'InstallPrerequisites', 'provision.ps1', 'configure-open-webui.ps1', '-EnableSignup', 'Who may register')) {
-        Assert-True -Condition ($readme.Contains($term)) -Message "README is missing: $term"
+$topicRequirements = @{
+    'docs/models/rename-models.md' = @('rename-model.ps1', '-WhatIf', 'old key and old model alias', 'not transactional', 'not expanded')
+    'README.md' = @('flowchart LR', 'docs/server-update.md', 'docs/privacy.md', 'docs/tuning.md', 'docs/api-access.md', 'docs/network-access.md')
+    'docs/getting-started.md' = @('WEBUI_ADMIN_EMAIL', 'Provision a server with one command', 'InstallPrerequisites', '-EnableSignup', 'Who may register')
+    'docs/open-webui.md' = @('Task Model', 'Built-in Tools: Off', 'configure-open-webui.ps1')
+    'docs/api-access.md' = @('install-key-manager.ps1', 'auto_discover_models', 'USER_VIRTUAL_KEY')
+    'docs/network-access.md' = @('PROXY_ENABLED=true', 'nginx/local', 'http://localhost:8481/v1', 'docker-compose.proxy.yml')
+    'docs/server-update.md' = @('git pull --ff-only', 'OLLAMA_NUM_PARALLEL=8', 'PRIVACY_MODE=false', 'docker-compose.privacy.yml', 'install-key-manager.ps1', 'postgres_data', 'openwebui_data')
+    'docs/tuning.md' = @('NVIDIA_GPU_COUNT=all', 'OLLAMA_CONTEXT_LENGTH=16384', 'OLLAMA_MAX_LOADED_MODELS=4', 'OLLAMA_NUM_PARALLEL=8', 'Evaluate capacity')
+    'docs/privacy.md' = @('Temporarily disable privacy', 'PRIVACY_MODE=false', 'PRIVACY_MODE=true', 'verify-privacy.py', 'down', 'model-lab.ps1 add')
+}
+foreach ($relativePath in $topicRequirements.Keys) {
+    $content = Get-Content -Raw -LiteralPath (Join-Path $repoRoot $relativePath)
+    foreach ($term in $topicRequirements[$relativePath]) {
+        Assert-True -Condition ($content.Contains($term)) -Message "$relativePath is missing guidance: $term"
     }
 }
+Assert-True -Condition (($mainReadme -split "`n").Count -le 120) -Message 'README should remain a concise overview; move detailed procedures into docs'
 
 if (Test-Path -LiteralPath (Join-Path $repoRoot 'docs/models/catalog.md')) {
     $catalog = Get-Content -Raw -LiteralPath (Join-Path $repoRoot 'docs/models/catalog.md')

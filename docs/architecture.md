@@ -2,7 +2,7 @@
 
 ## Purpose
 
-PocketMind is a single-host, local OpenAI-compatible LLM stack. The default security boundary is the host: published service ports bind to `127.0.0.1`, while containers communicate on the private Compose network `ai-net`.
+PocketMind is a single-host, local OpenAI-compatible LLM stack. The Docker CPU/NVIDIA base file publishes backend ports on `0.0.0.0` for direct server access; network controls must restrict callers. The native profile and Privacy mode keep backend bindings on `127.0.0.1`. Containers communicate on the Compose network `ai-net`, which becomes internal only in Privacy mode.
 
 ## Request path
 
@@ -26,7 +26,7 @@ flowchart LR
     Nginx -->|only /v1 inference paths| LiteLLM
 ```
 
-The nginx proxy is optional (`PROXY_ENABLED=true`) and is the only service meant to be reachable from other machines; see ADR 0005. The NVIDIA exporter exists only in the `nvidia` profile and `node_exporter` only in the `native` profile. The API Key Manager runs inside Open WebUI; users call LiteLLM directly with the key it issues.
+The nginx proxy is optional (`PROXY_ENABLED=true`) and is the intended user-facing route; direct backend ports in ordinary Docker mode require separate restrictions for approved management clients. See [Network access](network-access.md) and ADR 0005. The NVIDIA exporter exists only in the `nvidia` profile and `node_exporter` only in the `native` profile. The API Key Manager runs inside Open WebUI; users call LiteLLM directly with the key it issues.
 
 Open WebUI has direct Ollama access disabled. It uses LiteLLM as its OpenAI-compatible backend. LiteLLM owns stable routing aliases and sends requests to Ollama.
 
@@ -48,7 +48,7 @@ Model Lab creates custom aliases through LiteLLM's model-management API. Those a
 | `native` | Host via `host.docker.internal:11434` | Host runtime, including Metal on Apple Silicon | No container Ollama/exporter |
 | `auto` | Resolved by setup | NVIDIA when bounded probe succeeds; native on macOS; otherwise CPU | Matches resolved profile |
 
-The container Ollama runtime limits loaded models and parallel inference to one each. This protects memory-constrained hardware and means concurrent heavy requests should not be expected to scale.
+The container defaults allow one loaded model and one parallel request per model to protect memory-constrained hardware. Server `.env` settings can raise these limits and expose all GPUs through the NVIDIA overlay. See [Tuning](tuning.md) for capacity testing and tradeoffs.
 
 ## Persistence boundaries
 
@@ -72,7 +72,7 @@ The container Ollama runtime limits loaded models and parallel inference to one 
 - Issued keys are LiteLLM virtual keys limited to one model each, with a mandatory expiry and rate/concurrency limits. They call LiteLLM directly, so any network exposure of LiteLLM must forward only `/v1/*`.
 - LiteLLM teams are the single place where teams are managed. A user's team is found by matching the account email against team members; teams are mirrored one way to Open WebUI groups. Deleting a team deletes its keys.
 - The optional nginx proxy (HTTP only) exposes Open WebUI and only the LiteLLM inference paths. Administration paths of LiteLLM are 404 through it, it listens on `0.0.0.0` by default (`PROXY_BIND_ADDRESS`), and local allow/deny rules live in the git-ignored `nginx/local/`. It adds no state to back up.
-- Quick Tunnel is a temporary exception to localhost-only access and should expose only Open WebUI unless a separate, explicitly controlled API test is required.
+- Quick Tunnel creates temporary external ingress and should expose only Open WebUI for synthetic tests. It is incompatible with isolated-serving policy and requires separate approval of its data path.
 
 ## Monitoring
 
