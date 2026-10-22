@@ -5,7 +5,7 @@ services:
         reservations:
           devices:
             - driver: nvidia
-              count: 1
+              count: ${NVIDIA_GPU_COUNT:-1}
               capabilities: [gpu]
 
   nvidia-exporter:
@@ -21,7 +21,7 @@ services:
         reservations:
           devices:
             - driver: nvidia
-              count: 1
+              count: ${NVIDIA_GPU_COUNT:-1}
               capabilities: [gpu]
     healthcheck:
       test: ["CMD", "/usr/bin/nvidia_gpu_exporter", "--version"]

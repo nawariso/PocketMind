@@ -6,7 +6,7 @@ services:
     container_name: pocketmind-postgres
     restart: unless-stopped
     ports:
-      - "127.0.0.1:5432:5432"
+      - "${BACKEND_BIND_ADDRESS:-0.0.0.0}:5432:5432"
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
@@ -25,12 +25,15 @@ services:
     container_name: pocketmind-ollama
     restart: unless-stopped
     ports:
-      - "127.0.0.1:11434:11434"
+      - "${BACKEND_BIND_ADDRESS:-0.0.0.0}:11434:11434"
     environment:
       OLLAMA_CONTEXT_LENGTH: ${OLLAMA_CONTEXT_LENGTH:-8192}
       OLLAMA_KEEP_ALIVE: ${OLLAMA_KEEP_ALIVE:-10m}
-      OLLAMA_MAX_LOADED_MODELS: "1"
-      OLLAMA_NUM_PARALLEL: "1"
+      OLLAMA_MAX_LOADED_MODELS: ${OLLAMA_MAX_LOADED_MODELS:-1}
+      OLLAMA_NUM_PARALLEL: ${OLLAMA_NUM_PARALLEL:-1}
+      OLLAMA_FLASH_ATTENTION: ${OLLAMA_FLASH_ATTENTION:-false}
+      OLLAMA_KV_CACHE_TYPE: ${OLLAMA_KV_CACHE_TYPE:-f16}
+      OLLAMA_SCHED_SPREAD: ${OLLAMA_SCHED_SPREAD:-false}
     volumes:
       - ollama_data:/root/.ollama
     healthcheck:
@@ -66,7 +69,7 @@ services:
     container_name: pocketmind-litellm
     restart: unless-stopped
     ports:
-      - "127.0.0.1:4000:4000"
+      - "${BACKEND_BIND_ADDRESS:-0.0.0.0}:4000:4000"
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY}
@@ -96,7 +99,7 @@ services:
     container_name: pocketmind-open-webui
     restart: unless-stopped
     ports:
-      - "127.0.0.1:3000:8080"
+      - "${BACKEND_BIND_ADDRESS:-0.0.0.0}:3000:8080"
     environment:
       ENABLE_OLLAMA_API: "false"
       ENABLE_OPENAI_API: "true"
@@ -129,7 +132,7 @@ services:
     container_name: pocketmind-prometheus
     restart: unless-stopped
     ports:
-      - "127.0.0.1:9090:9090"
+      - "${BACKEND_BIND_ADDRESS:-0.0.0.0}:9090:9090"
     volumes:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus_data:/prometheus
@@ -155,7 +158,7 @@ services:
     container_name: pocketmind-grafana
     restart: unless-stopped
     ports:
-      - "127.0.0.1:3001:3000"
+      - "${BACKEND_BIND_ADDRESS:-0.0.0.0}:3001:3000"
     environment:
       GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER}
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}

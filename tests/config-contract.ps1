@@ -62,6 +62,7 @@ function Test-ComposeContract {
         [switch] $RequireNativeOllama
     )
 
+    $expectedBind = if ($RequireNativeOllama) { '127.0.0.1' } else { '0.0.0.0' }
     $composeArguments = @('compose')
     foreach ($composeFile in $ComposeFiles) { $composeArguments += @('-f', $composeFile) }
     $composeArguments += @('config', '--format', 'json')
@@ -107,8 +108,8 @@ function Test-ComposeContract {
             $hostIpProperty = $port.PSObject.Properties['host_ip']
             $publishedProperty = $port.PSObject.Properties['published']
             $publishedPort = if ($null -eq $publishedProperty) { '<unknown>' } else { $publishedProperty.Value }
-            Assert-True -Condition ($null -ne $hostIpProperty -and $hostIpProperty.Value -eq '127.0.0.1') `
-                -Message "$composeLabel service '$($serviceProperty.Name)' publishes port $publishedPort outside 127.0.0.1"
+            Assert-True -Condition ($null -ne $hostIpProperty -and $hostIpProperty.Value -eq $expectedBind) `
+                -Message "$composeLabel service '$($serviceProperty.Name)' must publish port $publishedPort on $expectedBind"
         }
     }
 
@@ -118,11 +119,11 @@ function Test-ComposeContract {
         $dbeaverPort = @($postgresPortsProperty.Value | Where-Object {
             $_.PSObject.Properties['target'].Value -eq 5432 -and
             $_.PSObject.Properties['published'].Value -eq '5432' -and
-            $_.PSObject.Properties['host_ip'].Value -eq '127.0.0.1'
+            $_.PSObject.Properties['host_ip'].Value -eq $expectedBind
         })
     }
     Assert-True -Condition ($dbeaverPort.Count -eq 1) `
-        -Message "$composeLabel must publish PostgreSQL exactly as 127.0.0.1:5432:5432 for DBeaver"
+        -Message "$composeLabel must publish PostgreSQL exactly as ${expectedBind}:5432:5432 for DBeaver"
 
     if ($RequireNvidiaExporter) {
         $exporterProperty = $config.services.PSObject.Properties['nvidia-exporter']
