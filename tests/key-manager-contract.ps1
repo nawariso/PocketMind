@@ -19,7 +19,8 @@ if (Test-Path -LiteralPath $pipePath) {
         '.get("user_id") == user_id',                # ownership is re-checked on the response
         '"duration": self.valves.key_duration',      # every key expires
         'default=20, ge=1, le=100',                  # total key cap per user
-        '"models": [model]',                         # every key is limited to exactly one model
+        '"models": models,',                         # every key is limited to the explicit, discovered models named at creation
+        'self._pick_model(word, models)',            # each listed model must come from discovery or the manual allowlist
         'self._pick_model(',                         # the model must come from discovery or the manual allowlist
         'auto_discover_models',
         'pocketmind_rename_from',

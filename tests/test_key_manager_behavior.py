@@ -257,6 +257,41 @@ class ModelDiscoveryTests(unittest.TestCase):
         self.assertIn("Please wait", self.pipe.command("new default-general"))
         self.assertEqual(len(self.generated()), 1)
 
+    def test_one_key_can_cover_several_listed_models(self):
+        self.pipe.catalog = {"data": [{"id": "default-general"}, {"id": "default-ocr"}, {"id": "Pocket-Qwen"}]}
+        result = self.pipe.command("new Pocket-Qwen DEFAULT-GENERAL default-ocr default-general as my-app")
+        self.assertIn("Your API key for `Pocket-Qwen`, `default-general`, `default-ocr`", result)
+        self.assertIn("cannot call other models", result)
+        payload = self.generated()[0]
+        self.assertEqual(payload["models"], ["Pocket-Qwen", "default-general", "default-ocr"])
+        self.assertEqual(payload["metadata"]["label"], "my-app")
+        self.assertEqual(payload["team_id"], "team-1")
+        self.assertIn("my-app", payload["key_alias"])
+        self.assertLessEqual(len(payload["key_alias"]), 90)
+
+    def test_unavailable_model_in_a_list_never_widens_or_issues_a_key(self):
+        self.pipe.catalog = {"data": [{"id": "default-general"}, {"id": "default-ocr"}]}
+        self.pipe.model_info = {"data": [{"model_name": "default-ocr", "model_info": {"pocketmind_rename_from": "old-ocr"}}]}
+        self.assertIn("not a member", self.pipe.command("new default-general old-ocr"))
+        self.assertIn("not available", self.pipe.command("new old-ocr default-general"))
+        self.assertEqual(self.generated(), [])
+
+    def test_multi_model_keys_are_managed_by_alias_and_counted_per_model(self):
+        self.pipe.catalog = {"data": [{"id": "default-general"}, {"id": "default-ocr"}]}
+        self.pipe.keys = [{"user_id": USER["id"], "models": ["default-general", "default-ocr"],
+                           "key_alias": "multi-key", "team_id": "team-1", "metadata": {"label": "app"}}]
+        models = self.pipe.command("models")
+        self.assertIn("| `default-general` | 1 |", models)
+        self.assertIn("| `default-ocr` | 1 |", models)
+        self.assertNotIn("earlier or unavailable", models)
+        self.assertIn("`default-general, default-ocr`", self.pipe.command("list"))
+        # A model name alone must not revoke or rotate a key that also covers other models.
+        self.assertIn("No matching key", self.pipe.command("revoke default-general"))
+        self.assertIn("Your API key for `default-general`, `default-ocr`", self.pipe.command("rotate multi-key"))
+        self.assertEqual(self.generated()[0]["models"], ["default-general", "default-ocr"])
+        self.assertEqual(self.generated()[0]["metadata"]["label"], "app")
+        self.assertIn("Revoked 1 key", self.pipe.command("revoke multi-key"))
+
     def test_task_and_unapproved_user_never_discover_or_issue_keys(self):
         self.assertEqual(self.pipe.command("new default-general", task="title_generation"), "API Key Manager")
         self.assertIn("approved", self.pipe.command("new default-general", user={"id": "pending", "role": "pending"}))

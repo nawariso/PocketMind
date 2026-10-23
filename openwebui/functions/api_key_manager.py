@@ -313,19 +313,24 @@ class Pipe:
             task.add_done_callback(self._tasks.discard)
 
     # ---- commands ---------------------------------------------------------
-    def _create(self, user, model, team_id, team_alias, label=None):
+    def _create(self, user, models, team_id, team_alias, label=None):
+        models = [models] if isinstance(models, str) else list(models)
+        model = models[0]
+        names = ", ".join(f"`{m}`" for m in models)
         alias_name = re.sub(r"[^a-z0-9]+", "-", (user.get("email") or user["id"]).split("@")[0].lower()).strip("-")[:20] or "user"
         model_slug = re.sub(r"[^a-z0-9]+", "-", model.lower()).strip("-")[:24]
+        if len(models) > 1:
+            model_slug = f"{model_slug[:18]}-plus{len(models) - 1}".strip("-")
         alias = "-".join(p for p in ("owui", alias_name, model_slug, label, secrets.token_hex(2)) if p)
         payload = {
             "key_alias": alias,
             "user_id": user["id"],
             "duration": self.valves.key_duration,
-            "models": [model],
+            "models": models,
             "rpm_limit": self.valves.rpm_limit,
             "tpm_limit": self.valves.tpm_limit,
             "max_parallel_requests": self.valves.max_parallel_requests,
-            "metadata": {"source": "open-webui", "email": user.get("email"), "name": user.get("name"), "model": model, "label": label},
+            "metadata": {"source": "open-webui", "email": user.get("email"), "name": user.get("name"), "model": model if len(models) == 1 else None, "models": models, "label": label},
         }
         if team_id:
             payload["team_id"] = team_id
@@ -335,11 +340,12 @@ class Pipe:
             raise RuntimeError("LiteLLM did not return a key.")
         base = self.valves.public_base_url.rstrip("/")
         return (
-            f"### Your API key for `{model}`\n\n"
+            f"### Your API key for {names}\n\n"
             f"```\n{key}\n```\n\n"
             "**Copy it now.** It is shown only once and cannot be retrieved later. "
             "This message is saved in this chat, so delete the chat after copying the key.\n\n"
-            f"- Alias: `{alias}`\n- Label: {f'`{label}`' if label else 'none'}\n- Model: `{model}` (this key cannot call other models)\n"
+            f"- Alias: `{alias}`\n- Label: {f'`{label}`' if label else 'none'}\n"
+            f"- {'Models' if len(models) > 1 else 'Model'}: {names} (this key cannot call other models)\n"
             f"- Team: {f'`{team_alias}`' if team_id else 'none'}\n"
             f"- Expires: {result.get('expires') or 'n/a'}\n"
             f"- Limits: {self.valves.rpm_limit} requests/min, {self.valves.tpm_limit} tokens/min, "
@@ -394,9 +400,9 @@ class Pipe:
         counts = {}
         owned_legacy = {}
         for key in keys:
-            model = self._key_model(key)
-            counts[model] = counts.get(model, 0) + 1
             scopes = key.get("models") or []
+            for model in set(m for m in scopes if isinstance(m, str)):
+                counts[model] = counts.get(model, 0) + 1
             if self._active_key(key) and isinstance(scopes, list):
                 for scope in set(m for m in scopes if isinstance(m, str)) & set(legacy_models):
                     owned_legacy[scope] = owned_legacy.get(scope, 0) + 1
@@ -413,20 +419,22 @@ class Pipe:
             for model in sorted(owned_legacy):
                 lines.append(f"| `{model}` | {owned_legacy[model]} |")
             lines.append("\nExisting keys can keep using these names. Use `list`, `rotate`, or `revoke` to manage them; new keys use current names only.")
-        if any(self._key_model(k) not in models for k in keys):
+        if any(not (k.get("models") or []) or not set(k["models"]) <= set(models) for k in keys):
             lines.append("\nUse `list` to manage keys for earlier or unavailable model names; they still count toward your total.")
         lines.append(f"\nYou may hold {self.valves.max_keys_per_user} keys in total.")
         if models:
-            lines.append("Type `new <model>` to create a key for one model, for example `new " + models[0] + "`.")
+            lines.append("Type `new <model>` to create a key for one model, for example `new " + models[0] + "`. "
+                         "List several names to let one key call all of them, for example `new " + " ".join(models[:2]) + "`.")
         return "\n".join(lines)
 
     def _help(self):
         return (
-            "### API Key Manager\n\nEach key works for **one model**, and you can create several keys for the same model. "
+            "### API Key Manager\n\nEach key works only for the models you name when creating it. "
             "Type one of these commands:\n\n"
             "| Command | What it does |\n|---|---|\n"
             "| `models` | Show current models and legacy names used by your active keys |\n"
             "| `new <model>` | Create a key for that model (shown **once**) |\n"
+            "| `new <model> <model> ...` | Create one key that works for every listed model, for example `new default-general default-ocr` |\n"
             "| `new <model> as <label>` | Create a key with a name, for example `new default-general as my-app` |\n"
             "| `list` | Show your keys without revealing them |\n"
             "| `rotate <alias or model>` | Replace a key (use the alias when you have several for a model) |\n"
@@ -500,9 +508,9 @@ class Pipe:
                 if len(targets) > 1:
                     return f"You have {len(targets)} keys for `{args[0]}`. Rotate one by its alias.\n\n" + self._describe(targets)
                 old = targets[0]
-                model = self._key_model(old)
-                if not model:
-                    return "That key was issued before one-model keys and cannot be rotated. Revoke it by alias, then create a new one."
+                scopes = old.get("models")
+                if not isinstance(scopes, list) or not scopes or not all(isinstance(m, str) and m and "*" not in m for m in scopes):
+                    return "That key has no explicit model list and cannot be rotated. Revoke it by alias, then create a new one."
                 team_id, team_alias, team_problem = await asyncio.to_thread(
                     self._resolve_team, user, " ".join(args[1:]) or None, old.get("team_id")
                 )
@@ -512,20 +520,28 @@ class Pipe:
                     return f"Please wait {self.valves.cooldown_seconds} seconds before trying again."
                 await asyncio.to_thread(self._litellm, "POST", "/key/delete", {"key_aliases": [old["key_alias"]]})
                 return await asyncio.to_thread(
-                    self._create, user, model, team_id, team_alias, (old.get("metadata") or {}).get("label")
+                    self._create, user, scopes, team_id, team_alias, (old.get("metadata") or {}).get("label")
                 )
 
-            # new <model> [team] [as <label>]
-            model = self._pick_model(args[0], models)
-            if not model:
+            # new <model> [<model> ...] [team] [as <label>]
+            # Leading words that name an offered model are the key's scope; the first other word starts the team.
+            picked, consumed = [], 0
+            for word in args:
+                found = self._pick_model(word, models)
+                if not found:
+                    break
+                consumed += 1
+                if found not in picked:
+                    picked.append(found)
+            if not picked:
                 return f"`{args[0]}` is not available for API keys.\n\n" + self._models_text(keys, models, legacy_models)
-            rest = args[1:]
+            rest = args[consumed:]
             label = None
             for index, word in enumerate(rest):
                 if word.lower() == "as":
                     label = self._clean_label(" ".join(rest[index + 1:]))
                     if not label:
-                        return "Give the label some letters or numbers, for example `new " + model + " as my-app`."
+                        return "Give the label some letters or numbers, for example `new " + picked[0] + " as my-app`."
                     rest = rest[:index]
                     break
             if len(keys) >= self.valves.max_keys_per_user:
@@ -538,7 +554,7 @@ class Pipe:
                 return team_problem
             if await asyncio.to_thread(self._cooling_down, user["id"]):
                 return f"Please wait {self.valves.cooldown_seconds} seconds before trying again."
-            return await asyncio.to_thread(self._create, user, model, team_id, team_alias, label)
+            return await asyncio.to_thread(self._create, user, picked, team_id, team_alias, label)
         except RuntimeError as error:
             return f"Sorry, the request could not be completed: {error}"
         return self._help()

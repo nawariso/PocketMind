@@ -138,7 +138,7 @@ Testing from a second device matters: every check made while building this ran o
 ## 6. Tell the users
 
 - Chat: `http://<ip>:8480`, sign in with the account the administrator created.
-- API: pick "API Key Manager" in the model list and type `models`, then `new <model>` (add `as <name>` to label a key). Each key works for one model, expires, and is shown once: copy it at once and delete that chat. `list` shows their keys, `rotate <alias>` replaces one, `revoke <alias>` removes one.
+- API: pick "API Key Manager" in the model list and type `models`, then `new <model>` (add `as <name>` to label a key). A key works only for the model(s) named at creation (list several, e.g. `new default-general default-ocr`, for one key that covers them), expires, and is shown once: copy it at once and delete that chat. `list` shows their keys, `rotate <alias>` replaces one, `revoke <alias>` removes one.
 - API base URL: `http://<ip>:8481/v1` (OpenAI-compatible).
 - The default parallel setting is one request per loaded model; server tuning can change it. Capacity-test before increasing concurrency; see [Tuning](tuning.md).
 

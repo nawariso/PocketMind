@@ -83,7 +83,7 @@ Pilot users create their own LiteLLM key from the Open WebUI model "API Key Mana
 - reach LiteLLM from other machines only through the nginx proxy (ADR 0005), which forwards just the inference paths; never publish `/ui`, `/key`, or `/model`, and add HTTPS before real use;
 - never use a weak master key; the Pipe reads it from the Open WebUI container environment;
 - publish API keys' endpoint through the nginx proxy (ADR 0005), which forwards only `/v1` inference paths;
-- keys are limited to one model each and attributed to the LiteLLM team the user belongs to (matched by email); manage teams only in LiteLLM, they are mirrored to Open WebUI groups by `sync` and never the other way;
+- keys are limited to the explicit models listed at creation (never wildcards; every name must be currently offered) and attributed to the LiteLLM team the user belongs to (matched by email); manage teams only in LiteLLM, they are mirrored to Open WebUI groups by `sync` and never the other way;
 - if you set the default user role to `user` so people are not left `pending`, keep sign-up closed or limited to a trusted identity provider, because every approved user can chat and create keys;
 - deleting a LiteLLM team also deletes every key attributed to it, so move or recreate keys before removing a team (`unassigned` included);
 - revoke a user's access by deleting their key in LiteLLM (Virtual Keys) or with `revoke` by that user.
