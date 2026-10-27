@@ -108,8 +108,10 @@ function Test-ComposeContract {
             $hostIpProperty = $port.PSObject.Properties['host_ip']
             $publishedProperty = $port.PSObject.Properties['published']
             $publishedPort = if ($null -eq $publishedProperty) { '<unknown>' } else { $publishedProperty.Value }
-            Assert-True -Condition ($null -ne $hostIpProperty -and $hostIpProperty.Value -eq $expectedBind) `
-                -Message "$composeLabel service '$($serviceProperty.Name)' must publish port $publishedPort on $expectedBind"
+            # Ollama has no authentication, so its host port stays on loopback unless OLLAMA_BIND_ADDRESS says otherwise.
+            $serviceBind = if ($serviceProperty.Name -eq 'ollama') { '127.0.0.1' } else { $expectedBind }
+            Assert-True -Condition ($null -ne $hostIpProperty -and $hostIpProperty.Value -eq $serviceBind) `
+                -Message "$composeLabel service '$($serviceProperty.Name)' must publish port $publishedPort on $serviceBind"
         }
     }
 
@@ -347,8 +349,10 @@ function Test-OcrModelContract {
     $composeContent = Get-Content -Raw -LiteralPath (Join-Path $repoRoot 'docker-compose.yml')
     Assert-True -Condition ($composeContent.Contains('OLLAMA_OCR_MODEL: ${OLLAMA_OCR_MODEL:-scb10x/typhoon-ocr1.5-3b}')) `
         -Message 'Container Ollama setup must define the official Typhoon OCR model'
-    Assert-True -Condition ($composeContent.Contains('ollama pull $${OLLAMA_OCR_MODEL}')) `
+    Assert-True -Condition ($composeContent.Contains('pull_or_keep "$${OLLAMA_OCR_MODEL}"')) `
         -Message 'Container Ollama setup must pull the configured OCR model'
+    Assert-True -Condition ($composeContent.Contains('keeping the existing local copy') -and $composeContent.Contains('ollama show "$$1"')) `
+        -Message 'A failed model pull must fall back to an existing local copy instead of failing the stack'
     Assert-True -Condition (-not $composeContent.Contains('OLLAMA_VISION_MODEL')) `
         -Message 'Container setup must not retain the replaced generic vision-model setting'
 

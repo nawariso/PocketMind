@@ -1,10 +1,17 @@
 name: pocketmind
 
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "20m"
+    max-file: "5"
+
 services:
   postgres:
     image: ${POSTGRES_IMAGE:-postgres:16-alpine}
     container_name: pocketmind-postgres
     restart: unless-stopped
+    logging: *default-logging
     ports:
       - "${BACKEND_BIND_ADDRESS:-0.0.0.0}:5432:5432"
     environment:
@@ -24,8 +31,9 @@ services:
     image: ${OLLAMA_IMAGE:-ollama/ollama:0.32.6}
     container_name: pocketmind-ollama
     restart: unless-stopped
+    logging: *default-logging
     ports:
-      - "${BACKEND_BIND_ADDRESS:-0.0.0.0}:11434:11434"
+      - "${OLLAMA_BIND_ADDRESS:-127.0.0.1}:11434:11434"
     environment:
       OLLAMA_CONTEXT_LENGTH: ${OLLAMA_CONTEXT_LENGTH:-8192}
       OLLAMA_KEEP_ALIVE: ${OLLAMA_KEEP_ALIVE:-10m}
@@ -50,6 +58,7 @@ services:
     image: ${OLLAMA_IMAGE:-ollama/ollama:0.32.6}
     container_name: pocketmind-model-init
     restart: "no"
+    logging: *default-logging
     depends_on:
       ollama:
         condition: service_healthy
@@ -58,11 +67,20 @@ services:
       OLLAMA_OCR_MODEL: ${OLLAMA_OCR_MODEL:-scb10x/typhoon-ocr1.5-3b}
     entrypoint: ["/bin/sh", "-c"]
     command:
-      - >
-        echo "Pulling ${OLLAMA_MODEL}..." &&
-        ollama pull ${OLLAMA_MODEL} &&
-        echo "Pulling $${OLLAMA_OCR_MODEL}..." &&
-        ollama pull $${OLLAMA_OCR_MODEL} &&
+      # A failed refresh must not take the stack down when a usable local copy exists: warn and keep that copy.
+      - |
+        pull_or_keep() {
+          echo "Pulling $$1..."
+          if ollama pull "$$1"; then return 0; fi
+          if ollama show "$$1" >/dev/null 2>&1; then
+            echo "WARNING: could not pull $$1; keeping the existing local copy." >&2
+            return 0
+          fi
+          echo "ERROR: could not pull $$1 and no local copy exists." >&2
+          return 1
+        }
+        pull_or_keep "${OLLAMA_MODEL}" &&
+        pull_or_keep "$${OLLAMA_OCR_MODEL}" &&
         echo "Models ${OLLAMA_MODEL} and $${OLLAMA_OCR_MODEL} are ready."
     networks: [ai-net]
 
@@ -70,6 +88,7 @@ services:
     image: ${LITELLM_IMAGE:-docker.litellm.ai/berriai/litellm-database:v1.96.0}
     container_name: pocketmind-litellm
     restart: unless-stopped
+    logging: *default-logging
     ports:
       - "${BACKEND_BIND_ADDRESS:-0.0.0.0}:4000:4000"
     environment:
@@ -102,6 +121,7 @@ services:
     image: ${OPEN_WEBUI_IMAGE:-ghcr.io/open-webui/open-webui@sha256:8b432fe0a65b91116afc7961365c6cca5379cc923171386a96691f3471f3cae9}
     container_name: pocketmind-open-webui
     restart: unless-stopped
+    logging: *default-logging
     ports:
       - "${BACKEND_BIND_ADDRESS:-0.0.0.0}:3000:8080"
     environment:
@@ -150,6 +170,7 @@ services:
     image: ${PROMETHEUS_IMAGE:-prom/prometheus:v3.5.0}
     container_name: pocketmind-prometheus
     restart: unless-stopped
+    logging: *default-logging
     ports:
       - "${BACKEND_BIND_ADDRESS:-0.0.0.0}:9090:9090"
     volumes:
@@ -160,7 +181,8 @@ services:
         target: /etc/prometheus/litellm_token
     command:
       - "--config.file=/etc/prometheus/prometheus.yml"
-      - "--storage.tsdb.retention.time=7d"
+      - "--storage.tsdb.retention.time=${PROMETHEUS_RETENTION_TIME:-30d}"
+      - "--storage.tsdb.retention.size=${PROMETHEUS_RETENTION_SIZE:-10GB}"
     depends_on:
       litellm:
         condition: service_healthy
@@ -176,6 +198,7 @@ services:
     image: ${GRAFANA_IMAGE:-grafana/grafana:12.1.0}
     container_name: pocketmind-grafana
     restart: unless-stopped
+    logging: *default-logging
     ports:
       - "${BACKEND_BIND_ADDRESS:-0.0.0.0}:3001:3000"
     environment:

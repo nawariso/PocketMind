@@ -101,9 +101,10 @@ class ComposePrivacyTests(unittest.TestCase):
         for file in ("docker-compose.yml", "docker-compose.native-ollama.yml"):
             config = self.render(file)
             expected_bind = "0.0.0.0" if file == "docker-compose.yml" else "127.0.0.1"
-            for service in config["services"].values():
+            for name, service in config["services"].items():
                 for port in service.get("ports", []):
-                    self.assertEqual(port["host_ip"], expected_bind)
+                    # Ollama has no authentication: its host port is loopback unless OLLAMA_BIND_ADDRESS says otherwise.
+                    self.assertEqual(port["host_ip"], "127.0.0.1" if name == "ollama" else expected_bind)
             self.assertFalse(config["networks"]["ai-net"].get("internal", False))
             web = config["services"]["open-webui"]["environment"]
             self.assertEqual(web["ENABLE_VERSION_UPDATE_CHECK"], "false")
@@ -132,8 +133,11 @@ class ComposePrivacyTests(unittest.TestCase):
             devices = config["services"][name]["deploy"]["resources"]["reservations"]["devices"]
             self.assertEqual(len(devices), 1)
             self.assertEqual(devices[0]["count"], -1)
-        self.assertEqual(ollama["ports"][0]["host_ip"], tuning["BACKEND_BIND_ADDRESS"])
-        private = self.render(*files, "docker-compose.privacy.yml", extra_env=tuning)
+        self.assertEqual(ollama["ports"][0]["host_ip"], "127.0.0.1")
+        self.assertEqual(config["services"]["litellm"]["ports"][0]["host_ip"], tuning["BACKEND_BIND_ADDRESS"])
+        opened = self.render(*files, extra_env={"OLLAMA_BIND_ADDRESS": "10.1.2.3"})
+        self.assertEqual(opened["services"]["ollama"]["ports"][0]["host_ip"], "10.1.2.3")
+        private =self.render(*files, "docker-compose.privacy.yml", extra_env=tuning)
         for key in tuning:
             if key.startswith("OLLAMA_"):
                 self.assertEqual(private["services"]["ollama"]["environment"][key], tuning[key])

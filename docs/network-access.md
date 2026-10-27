@@ -7,14 +7,14 @@
 | Open WebUI | http://localhost:3000 |
 | LiteLLM API | http://localhost:4000/v1 |
 | LiteLLM Admin | http://localhost:4000/ui |
-| Ollama container/host | http://localhost:11434 when applicable |
+| Ollama container/host | http://localhost:11434 when applicable (this host only by default) |
 | Prometheus | http://localhost:9090 |
 | Grafana | http://localhost:3001 |
 | PostgreSQL | `127.0.0.1:5432` |
 | nginx proxy, Open WebUI (optional) | http://localhost:8480, or `http://<host-ip>:8480` when shared |
 | nginx proxy, LiteLLM API (optional) | http://localhost:8481/v1, or `http://<host-ip>:8481/v1` when shared |
 
-Repository scripts start the nginx proxy when `PROXY_ENABLED=true` in `.env` (see "Shared pilot access with the nginx proxy"). The Docker CPU/NVIDIA base file publishes all six backend ports on `${BACKEND_BIND_ADDRESS:-0.0.0.0}`, so with the default those URLs also work with the server IP (subject to firewall rules). The native profile keeps backend ports on `127.0.0.1`. Privacy mode replaces backend bindings with loopback-only bindings; the proxy listens on `0.0.0.0` unless `PROXY_BIND_ADDRESS` says otherwise.
+Repository scripts start the nginx proxy when `PROXY_ENABLED=true` in `.env` (see "Shared pilot access with the nginx proxy"). The Docker CPU/NVIDIA base file publishes the Postgres, LiteLLM, Open WebUI, Prometheus and Grafana ports on `${BACKEND_BIND_ADDRESS:-0.0.0.0}`, so with the default those URLs also work with the server IP (subject to firewall rules). **Ollama (11434) is the exception:** it has no authentication, so its host port follows `${OLLAMA_BIND_ADDRESS:-127.0.0.1}` and stays on loopback; LiteLLM reaches it over the internal Docker network, and `docker exec pocketmind-ollama ollama ...` needs no published port. The native profile keeps backend ports on `127.0.0.1`. Privacy mode replaces backend bindings with loopback-only bindings; the proxy listens on `0.0.0.0` unless `PROXY_BIND_ADDRESS` says otherwise.
 
 Credentials are the private values you set in `.env` after copying `.env.example`:
 
@@ -135,7 +135,7 @@ curl --noproxy '*' http://127.0.0.1:8481/nginx-health
 
 Raw Compose does not interpret `PROXY_ENABLED` or `PRIVACY_MODE` as file-selection switches. List the proxy file explicitly; if privacy is active, append `-f docker-compose.privacy.yml` last to lifecycle commands. Repository scripts handle those flags automatically.
 
-Ask Infra for TCP access from approved client networks to `8480` (WebUI, including WebSocket Upgrade) and `8481` (inference API), or the organization's HTTPS ingress. Direct admin/diagnostic access uses TCP `3000`, `3001`, `4000`, `9090`, `5432`, `11434` only where deliberately permitted; PostgreSQL is not a web page. Port `9835` is internal and needs no client firewall opening. Port `9100` is optional host-exporter traffic, not a browser endpoint. SSH/PAM follows the organization's management policy.
+Ask Infra for TCP access from approved client networks to `8480` (WebUI, including WebSocket Upgrade) and `8481` (inference API), or the organization's HTTPS ingress. Direct admin/diagnostic access uses TCP `3000`, `3001`, `4000`, `9090`, `5432` only where deliberately permitted (`11434` is loopback-only by default and should stay closed); PostgreSQL is not a web page. Port `9835` is internal and needs no client firewall opening. Port `9100` is optional host-exporter traffic, not a browser endpoint. SSH/PAM follows the organization's management policy.
 
 `0.0.0.0` is a listen address, not a browser destination. Use the server's IP/name. Opening a firewall cannot expose a port bound only to `127.0.0.1`, and cannot create an nginx listener that has not been started. See [connection troubleshooting](troubleshooting.md) and [privacy](privacy.md) before broadening access.
 

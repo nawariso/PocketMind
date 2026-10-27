@@ -6,11 +6,18 @@
 # The proxy is the only service meant to be reachable from other machines, so it listens on every interface
 # (0.0.0.0) by default. Set PROXY_BIND_ADDRESS to the host's LAN IP to listen on one interface only, or to
 # 127.0.0.1 to keep it local.
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "20m"
+    max-file: "5"
+
 services:
   nginx:
     image: ${NGINX_IMAGE:-nginx:1.30-alpine}
     container_name: pocketmind-nginx
     restart: unless-stopped
+    logging: *default-logging
     ports:
       - "${PROXY_BIND_ADDRESS:-0.0.0.0}:${PROXY_WEBUI_PORT:-8480}:8080"
       - "${PROXY_BIND_ADDRESS:-0.0.0.0}:${PROXY_API_PORT:-8481}:8081"
