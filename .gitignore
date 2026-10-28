@@ -2,6 +2,9 @@
 .env
 .env.*
 !.env.example
+!.env.governance.example
+.governance-state/
+governance/config.local.json
 prometheus/litellm_token
 
 # OS and editor files

@@ -21,6 +21,7 @@ flowchart LR
 - `default-general` (`qwen3:4b-instruct-2507-q4_K_M`) is the initial text model.
 - `default-ocr` (`scb10x/typhoon-ocr1.5-3b`) is the initial Thai/English OCR model.
 - Model Lab registers additional local models with your chosen aliases.
+- An optional [governance POC](docs/governance.md) demonstrates one-request model delivery with durable progress using synthetic fixtures; it does not change default startup or require MuleSoft.
 - Docker volumes keep models, accounts, chats, API keys and monitoring state on each host.
 
 `auto` chooses native Ollama on macOS, NVIDIA when the Docker GPU probe succeeds on Windows/Linux, otherwise CPU. See [architecture](docs/architecture.md) for request paths, persistence and trust boundaries.

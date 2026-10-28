@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:pocketmind:governance:model-release:1",
+  "title": "Approved model release v1",
+  "type": "object",
+  "required": ["schema_version", "release_id", "status", "source", "license", "runtime", "files", "metadata", "scans", "evaluation", "approval"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "release_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,95}$"},
+    "status": {"const": "approved"},
+    "fixture": {"type": "boolean", "description": "Synthetic releases are refused by the live runtime adapter."},
+    "source": {
+      "type": "object", "required": ["provider", "model_id", "revision"],
+      "properties": {
+        "provider": {"enum": ["huggingface", "ollama"]}, "model_id": {"type": "string", "minLength": 1},
+        "revision": {"type": "string"}, "blob_digests": {"type": "array", "minItems": 1, "items": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"}}
+      },
+      "allOf": [
+        {"if": {"properties": {"provider": {"const": "huggingface"}}}, "then": {"properties": {"revision": {"pattern": "^[a-f0-9]{40}$"}}}},
+        {"if": {"properties": {"provider": {"const": "ollama"}}}, "then": {"required": ["blob_digests"], "properties": {"revision": {"pattern": "^sha256:[a-f0-9]{64}$"}}}}
+      ]
+    },
+    "license": {"type": "string", "minLength": 1, "maxLength": 256},
+    "runtime": {"type": "object", "required": ["name", "version"], "properties": {"name": {"const": "ollama"}, "version": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"}}},
+    "files": {
+      "type": "array", "minItems": 2, "maxItems": 100,
+      "items": {"type": "object", "additionalProperties": false, "required": ["path", "size", "sha256", "role"], "properties": {
+        "path": {"type": "string", "minLength": 1, "maxLength": 256}, "size": {"type": "integer", "minimum": 1},
+        "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}, "role": {"enum": ["weights", "license"]}
+      }},
+      "allOf": [
+        {"contains": {"properties": {"role": {"const": "weights"}}}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"role": {"const": "license"}}}, "minContains": 1}
+      ]
+    },
+    "metadata": {"type": "object", "additionalProperties": false, "properties": {
+      "template": {"type": "string", "maxLength": 32768}, "system": {"type": "string", "maxLength": 32768},
+      "parameters": {"type": "object", "additionalProperties": false, "properties": {
+        "temperature": {"type": "number", "minimum": 0, "maximum": 1000}, "top_p": {"type": "number", "minimum": 0, "maximum": 1000},
+        "top_k": {"type": "number", "minimum": 0, "maximum": 1000}, "repeat_penalty": {"type": "number", "minimum": 0, "maximum": 1000},
+        "num_ctx": {"type": "integer", "minimum": 0, "maximum": 1048576},
+        "stop": {"type": "array", "maxItems": 16, "items": {"type": "string", "minLength": 1, "maxLength": 256}}
+      }}
+    }},
+    "scans": {"type": "array", "minItems": 1, "items": {"type": "object", "required": ["tool", "version", "format", "status", "covered_files"], "properties": {
+      "tool": {"type": "string", "minLength": 1}, "version": {"type": "string", "minLength": 1}, "format": {"const": "gguf"}, "status": {"const": "passed"},
+      "covered_files": {"type": "array", "items": {"type": "string"}}
+    }}},
+    "evaluation": {"type": "object", "required": ["status", "evidence_id"], "properties": {"status": {"const": "passed"}, "evidence_id": {"type": "string", "minLength": 1}}},
+    "approval": {"type": "object", "required": ["mode", "identity", "policy_version", "approved_at"], "properties": {
+      "mode": {"enum": ["policy", "review"]}, "identity": {"type": "string", "minLength": 1}, "policy_version": {"type": "string", "minLength": 1},
+      "approved_at": {"type": "string", "format": "date-time"}, "requester": {"type": "string", "minLength": 1}
+    }}
+  },
+  "description": "contracts.py additionally enforces safe paths, case-insensitive path uniqueness, full scan coverage, GGUF suffix, digest provenance and independent human review. Always validate against the authenticated current authority as well as this schema."
+}

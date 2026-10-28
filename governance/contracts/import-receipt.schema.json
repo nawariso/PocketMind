@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:pocketmind:governance:import-receipt:1",
+  "type": "object",
+  "required": ["schema_version", "release_id", "alias", "access_group_id", "manifest_sha256", "physical_name", "state", "completed", "created_at"],
+  "properties": {
+    "schema_version": {"const": 1}, "release_id": {"type": "string"}, "alias": {"type": "string"}, "access_group_id": {"type": "string"},
+    "manifest_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}, "physical_name": {"type": "string", "pattern": "^pm-[a-f0-9]{32}$"},
+    "state": {"enum": ["pending", "failed", "ready"]},
+    "completed": {"type": "array", "uniqueItems": true, "items": {"enum": ["verify", "install", "smoke_test", "register", "grant_access"]}},
+    "created_at": {"type": "number"}, "updated_at": {"type": "number"}, "error": {"type": ["string", "null"]}
+  }
+}

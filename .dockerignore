@@ -1,0 +1,9 @@
+.git
+.env*
+.governance-state
+governance/config.local.json
+**/__pycache__
+**/*.pyc
+tmp
+temp
+ref

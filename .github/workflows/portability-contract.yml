@@ -5,6 +5,23 @@ on:
   pull_request:
 
 jobs:
+  governance-behavior:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-14, ubuntu-latest]
+        python: ['3.11', '3.14']
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Optional governance behavior (standard library only)
+        env:
+          GOV_RUN_PWSH_TESTS: '1'
+        run: python -X utf8 -m unittest discover -s tests -p 'test_governance_*.py' -v
+
   key-manager-behavior:
     runs-on: ubuntu-latest
     steps:

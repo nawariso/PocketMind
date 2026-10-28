@@ -90,6 +90,8 @@ Pilot users create their own LiteLLM key from the Open WebUI model "API Key Mana
 
 ## Model approval and execution boundaries
 
+The optional [governed delivery integration](governance.md) adds bundle/authority verification, durable jobs and requested group grants. Its coordinator is a labelled synthetic POC, not a production scanner or approval authority. Real identity, source scanning, policy and live qualification are required. Standalone Model Lab remains available for other deployments; managed deployments enforce their required path through infrastructure and privileged access controls.
+
 A local model produces outputs through the inference engine. Network requests, file reads and shell commands occur through the serving software or attached tools; model outputs can still cause unsafe actions if a client executes them. Untrusted documents can contain prompt injection. Runtime/parser vulnerabilities and unreviewed custom code are additional risks, so local weights are not a security certification.
 
 Before adding an organizational model:

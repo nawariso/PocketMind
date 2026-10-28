@@ -1,0 +1,29 @@
+# Separate opt-in SYNTHETIC POC project. Never combine with the serving Compose files.
+name: pocketmind-governance
+services:
+  coordinator:
+    build:
+      context: .
+      dockerfile: governance/Dockerfile
+    restart: unless-stopped
+    environment:
+      POCKETMIND_GOV_ADMIN_TOKEN: ${POCKETMIND_GOV_ADMIN_TOKEN:?Set a private governance admin token}
+      POCKETMIND_GOV_AGENT_TOKEN: ${POCKETMIND_GOV_AGENT_TOKEN:?Set a distinct private governance agent token}
+    ports: ["127.0.0.1:8787:8787"]
+    volumes: ["governance_state:/state"]
+    networks: [governance-net]
+    read_only: true
+    tmpfs: ["/tmp:size=32m,mode=1777"]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 64
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8787/health',timeout=3).close()"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+networks:
+  governance-net:
+    internal: true
+volumes:
+  governance_state:

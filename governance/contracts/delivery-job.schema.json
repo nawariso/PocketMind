@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:pocketmind:governance:delivery-job:1",
+  "type": "object",
+  "required": ["schema_version", "job_id", "request", "state", "steps", "attempt", "release_id", "history", "created_at", "updated_at"],
+  "properties": {
+    "schema_version": {"const": 1}, "job_id": {"type": "string", "format": "uuid"},
+    "state": {"enum": ["requested", "running", "ready", "failed", "rejected", "awaiting_approval", "cancelled"]},
+    "release_id": {"type": ["string", "null"]}, "attempt": {"type": "integer", "minimum": 0},
+    "retry_count": {"type": "integer", "minimum": 0, "maximum": 3}, "next_retry_at": {"type": ["number", "null"]},
+    "request": {"$ref": "acquisition-api.yaml#/components/schemas/Demand"},
+    "history": {"type": "array", "items": {"type": "object"}},
+    "created_at": {"type": "number"}, "updated_at": {"type": "number"},
+    "steps": {"type": "array", "minItems": 12, "maxItems": 12, "items": {"type": "object", "required": ["name", "status", "attempts", "started_at", "finished_at", "error", "bytes", "total_bytes"], "properties": {
+      "name": {"enum": ["preflight", "resolve", "download", "scan", "policy", "publish", "transfer", "verify", "install", "smoke_test", "register", "grant_access"]},
+      "status": {"enum": ["pending", "running", "succeeded", "failed", "blocked", "skipped"]}, "attempts": {"type": "integer", "minimum": 0},
+      "started_at": {"type": ["number", "null"]}, "finished_at": {"type": ["number", "null"]}, "error": {"type": ["string", "null"]},
+      "bytes": {"type": ["integer", "null"], "minimum": 0}, "total_bytes": {"type": ["integer", "null"], "minimum": 0}
+    }}}
+  },
+  "not": {"required": ["lease"]}
+}

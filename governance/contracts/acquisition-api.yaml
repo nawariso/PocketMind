@@ -1,0 +1,188 @@
+openapi: 3.1.0
+info:
+  title: PocketMind Governed Model Acquisition
+  version: 1.0.0
+  description: >-
+    Repo-owned integration contract, not a MuleSoft built-in API. POC server implements
+    synthetic acquisition only. Use validated TLS, organization identity and qualified
+    acquisition/scanning for real deployment. Browser sessions are not API bearer tokens.
+security:
+  - adminBearer: []
+paths:
+  /model-acquisitions:
+    post:
+      operationId: requestModel
+      parameters:
+        - in: header
+          name: Idempotency-Key
+          required: true
+          schema: {type: string, minLength: 1, maxLength: 128}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/Demand'}
+      responses:
+        '202':
+          description: Durable delivery job; processing continues without the requesting client.
+          content:
+            application/json:
+              schema: {$ref: delivery-job.schema.json}
+        '409': {description: Idempotency conflict or target alias already reserved.}
+        '401': {description: Admin bearer required.}
+        '400': {description: Invalid or unsupported demand.}
+    get:
+      operationId: listModelJobs
+      responses:
+        '200': {description: Most recent 100 jobs and explicit server mode.}
+  /model-acquisitions/{job_id}:
+    parameters:
+      - {$ref: '#/components/parameters/JobId'}
+    get:
+      operationId: getModelJob
+      responses:
+        '200':
+          description: Public state, checklist, retries, sanitized errors; no lease or credentials.
+          content:
+            application/json:
+              schema: {$ref: delivery-job.schema.json}
+        '404': {description: Unknown job.}
+  /model-acquisitions/{job_id}/retry:
+    parameters:
+      - {$ref: '#/components/parameters/JobId'}
+    post:
+      operationId: retryModelJob
+      responses:
+        '200': {description: Failed job requeued from completed checkpoints; at most three retries.}
+        '400': {description: Rejected/review/ready jobs cannot be retried or retry limit reached.}
+  /model-acquisitions/{job_id}/cancel:
+    parameters:
+      - {$ref: '#/components/parameters/JobId'}
+    post:
+      operationId: cancelModelJob
+      responses:
+        '200': {description: Cooperative cancellation; completed effects retained and recorded.}
+  /model-releases/{release_id}/manifest:
+    parameters:
+      - {$ref: '#/components/parameters/ReleaseId'}
+    get:
+      operationId: getApprovedManifest
+      security: [{adminBearer: []}, {agentBearer: []}]
+      responses:
+        '200':
+          description: Current approved immutable manifest; unapproved or revoked releases fail closed.
+          content:
+            application/json:
+              schema: {$ref: model-release.schema.json}
+  /model-releases/{release_id}/files/{file_path}:
+    parameters:
+      - {$ref: '#/components/parameters/ReleaseId'}
+      - in: path
+        name: file_path
+        required: true
+        schema: {type: string}
+      - in: header
+        name: Range
+        schema: {type: string, pattern: '^bytes=[0-9]+-$'}
+    get:
+      operationId: downloadApprovedArtifact
+      security: [{adminBearer: []}, {agentBearer: []}]
+      responses:
+        '200': {description: Full approved file with Content-Length.}
+        '206': {description: Approved partial file with validated Content-Range.}
+  /agent/claim:
+    post:
+      operationId: claimTargetJob
+      security: [{agentBearer: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [target_id]
+              properties:
+                target_id: {type: string}
+      responses:
+        '200': {description: 'Object with job: null or published job plus opaque lease. Token is bound to its configured target; lease expires after 60 seconds.'}
+  /agent/jobs/{job_id}/heartbeat:
+    parameters:
+      - {$ref: '#/components/parameters/JobId'}
+    post:
+      operationId: renewTargetLease
+      security: [{agentBearer: []}]
+      requestBody: {$ref: '#/components/requestBodies/Lease'}
+      responses:
+        '200': {description: Active lease extended for 60 seconds; heartbeat every 10 seconds.}
+        '409': {description: Expired, cancelled or stale lease.}
+  /agent/jobs/{job_id}/step:
+    parameters:
+      - {$ref: '#/components/parameters/JobId'}
+    post:
+      operationId: reportTargetStep
+      security: [{agentBearer: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [lease, name, status]
+              additionalProperties: false
+              properties:
+                lease: {type: string}
+                name: {enum: [transfer, verify, install, smoke_test, register, grant_access]}
+                status: {enum: [running, succeeded, failed, blocked]}
+                error: {type: [string, 'null']}
+                progress: {type: array, minItems: 2, maxItems: 2, description: '[bytes, total_bytes or null]'}
+      responses:
+        '200': {description: Checkpoint persisted; preceding steps must have succeeded.}
+  /agent/jobs/{job_id}/finish:
+    parameters:
+      - {$ref: '#/components/parameters/JobId'}
+    post:
+      operationId: finishTargetJob
+      security: [{agentBearer: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [lease, state]
+              properties:
+                lease: {type: string}
+                state: {enum: [ready, failed]}
+      responses:
+        '200': {description: ready requires all steps succeeded, including verified requested group grant.}
+components:
+  securitySchemes:
+    adminBearer: {type: http, scheme: bearer, description: Privileged administrator identity.}
+    agentBearer: {type: http, scheme: bearer, description: Separate target-bound agent credential.}
+  parameters:
+    JobId: {in: path, name: job_id, required: true, schema: {type: string, format: uuid}}
+    ReleaseId: {in: path, name: release_id, required: true, schema: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9_.-]{0,95}$'}}
+  requestBodies:
+    Lease:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [lease]
+            properties:
+              lease: {type: string}
+  schemas:
+    Demand:
+      type: object
+      additionalProperties: false
+      required: [source, model_id, revision, artifact, alias, target_id, access_group_id, purpose]
+      properties:
+        source: {enum: [huggingface, ollama]}
+        model_id: {type: string, minLength: 1, maxLength: 256}
+        revision: {type: string, minLength: 1, maxLength: 256}
+        artifact: {type: string, minLength: 1, maxLength: 256}
+        alias: {type: string, minLength: 1, maxLength: 128}
+        target_id: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9_.-]{0,95}$'}
+        access_group_id: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9_.-]{0,95}$'}
+        purpose: {type: string, minLength: 1, maxLength: 1000}

@@ -1,5 +1,7 @@
 # Managing local models
 
+For an optional automated acquisition/approval/import path, see [governed model delivery](../governance.md). Its current admin demo is synthetic and does not replace the direct Model Lab workflow below.
+
 [Model catalog](catalog.md) records the initial models; [evaluation guide](evaluation-guide.md) covers choosing a model for a workload. Downloading weights and registering an API alias are separate operations. `ollama list` shows physical tags, while Model Lab and `/v1/models` show LiteLLM aliases.
 
 ## Model Lab: try another Ollama model without editing config

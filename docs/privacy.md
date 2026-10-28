@@ -13,6 +13,8 @@ The ordinary bridge network still allows bootstrap downloads. **With `PRIVACY_MO
 
 ## Isolated serving mode
 
+The optional [governed delivery POC](governance.md) runs separately. Synthetic mode never changes serving containers. Real integration uses a management host agent with approved internal connectivity; it must not add external networks to backends or require disabling Privacy mode. Actual scanner/acquisition and firewall qualification remain deployment work.
+
 `PRIVACY_MODE=true` adds `docker-compose.privacy.yml` last in repository-script Compose calls. It requires Docker Compose 2.24.4 or newer (`!override`), `PROXY_ENABLED=true` and Docker CPU/NVIDIA; native host Ollama is explicitly rejected because it is outside this boundary.
 
 The overlay makes `ai-net` internal. All inference, UI, database and monitoring backends attach only to it. nginx also gets a separate `privacy-edge` network for user ingress. Model-init inspects local weights instead of pulling them. Open WebUI enables offline mode, disables model auto-updates and ignores persisted application configuration in favor of environment defaults. Its provider is local LiteLLM; sign-up, code execution/interpreter, community sharing and user webhooks are disabled, and remote tool/terminal server lists start empty.

@@ -1,0 +1,16 @@
+{
+  "api_base": "http://127.0.0.1:8787",
+  "test_loopback_http": true,
+  "admin_token_env": "POCKETMIND_GOV_ADMIN_TOKEN",
+  "agent_token_env": "POCKETMIND_GOV_AGENT_TOKEN",
+  "target_id": "local",
+  "state_dir": ".governance-state/agent",
+  "runtime": {
+    "ollama_base": "http://127.0.0.1:11434",
+    "litellm_base": "http://127.0.0.1:4000",
+    "webui_base": "http://127.0.0.1:3000",
+    "litellm_token_env": "LITELLM_MASTER_KEY",
+    "webui_token_env": "POCKETMIND_WEBUI_ADMIN_TOKEN",
+    "allowed_groups": ["testers"]
+  }
+}
