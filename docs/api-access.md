@@ -53,9 +53,35 @@ pwsh ./scripts/create-virtual-key.ps1
 
 Use an OpenAI-compatible provider, base URL `http://<server-ip>:8481/v1` through the proxy (or the approved HTTPS equivalent), a scoped user Virtual Key, and the exact registered model alias. The key's model scope must match that alias. Do not put the LiteLLM master key in an IDE or share it with users. Port `8481` deliberately does not expose model/key/team administration.
 
+For Hermes, set the custom provider's **Base URL** to `http://<server-ip>:8481/v1`, not the full `/v1/chat/completions` endpoint. The client appends `/chat/completions` itself; including it in the Base URL produces `/v1/chat/completions/chat/completions` and nginx returns 404. The model field must contain the registered alias, not the prompt text.
+
+API Key Manager v0.6.2 displays these connection settings separately from its full-endpoint curl example and includes a local-image Python example when creating or rotating a key. To update the installed Function after pulling the code, rerun `pwsh ./scripts/install-key-manager.ps1 -AdminEmail <admin-email>`. Existing Valves and keys are preserved. In the Function's Valves, set `public_base_url` to the reachable `/v1` URL without `/chat/completions`; updating Python defaults does not overwrite saved Valves. Existing key holders can use the settings above without rotating their key.
+
 The serving model must support the IDE's actual protocol and tools. File reading, Excel parsing, terminal commands and edits are performed by IDE tools or an approved execution service, not by model weights alone. Check tool results and messages sent by the IDE; selecting a larger model does not install an Excel parser. Keep file access, terminal/network permissions and auto-approve restricted in the IDE. Disable unapproved cloud fallback and extensions independently of server privacy settings.
 
 For partial/empty responses, capture the non-secret request metadata, `finish_reason`, tool-call flow and context size; see [troubleshooting](troubleshooting.md). Compare direct local Ollama, LiteLLM API, then IDE to locate the failing layer.
+
+## Send images through the API
+
+Image input uses the same `POST /v1/chat/completions` endpoint and scoped user key as text. Select an alias backed by a model that supports image input, and ensure the key allows that exact alias. A key does not add image support to a text-only model. This is image analysis/OCR, not image generation.
+
+In the JSON request, use a content array containing text and an `image_url` data URL:
+
+```json
+{
+  "model": "<allowed-vision-alias>",
+  "messages": [{
+    "role": "user",
+    "content": [
+      {"type": "text", "text": "Describe this image and read any visible text."},
+      {"type": "image_url", "image_url": {"url": "data:image/png;base64,<BASE64_OF_LOCAL_PNG>"}}
+    ]
+  }],
+  "max_tokens": 512
+}
+```
+
+Replace both placeholders before sending. Encode the image file's bytes, not its path; a local path on the client is not a file the server can read. Use `image/jpeg` for JPEG bytes. Inline base64 avoids requiring the server to download an external image. The proxy accepts request bodies up to 50 MB; base64 adds approximately one third to the original file size, plus JSON overhead. Model-specific image/context limits and key rate limits still apply. Confirm OCR accuracy with a known fixture before using the output.
 
 ## Rate limits and fair access
 

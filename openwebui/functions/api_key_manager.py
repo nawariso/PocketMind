@@ -1,7 +1,7 @@
 """
 title: API Key Manager
 author: PocketMind
-version: 0.6.1
+version: 0.6.2
 description: Lets signed-in Open WebUI users create, list, rotate, and revoke their own LiteLLM API keys, one model per key and several keys per model, attributed to the LiteLLM team they belong to. LiteLLM teams are the single source of truth and are mirrored to Open WebUI groups.
 """
 
@@ -30,7 +30,7 @@ class Pipe:
         litellm_url: str = Field(default="http://litellm:4000", description="Internal LiteLLM base URL.")
         public_base_url: str = Field(
             default="http://localhost:4000/v1",
-            description="Base URL shown to users in the usage example. Set it to the address users can reach.",
+            description="OpenAI-compatible base URL shown to users, ending in /v1 (not /chat/completions). Set it to the address users can reach.",
         )
         auto_discover_models: bool = Field(
             default=True,
@@ -350,10 +350,49 @@ class Pipe:
             f"- Expires: {result.get('expires') or 'n/a'}\n"
             f"- Limits: {self.valves.rpm_limit} requests/min, {self.valves.tpm_limit} tokens/min, "
             f"{self.valves.max_parallel_requests} concurrent request(s)\n\n"
-            "Example:\n\n"
+            "### Hermes / IDE connection settings\n\n"
+            "Choose an OpenAI-compatible / custom provider.\n\n"
+            f"- Base URL: `{base}`\n"
+            f"- Model: `{model}` (exact alias; the key must allow it)\n"
+            "- API key: the key shown above\n\n"
+            "Do not append `/chat/completions` to the Base URL: the client adds it automatically. "
+            "For a multi-model key, you can select any of the allowed model aliases listed above.\n\n"
+            "### Text API example (curl)\n\n"
+            "curl uses the full endpoint, unlike the Base URL setting above. Replace `<your-key>` locally.\n\n"
             f"```bash\ncurl {base}/chat/completions \\\n  -H \"Authorization: Bearer <your-key>\" \\\n"
             "  -H \"Content-Type: application/json\" \\\n"
-            f"  -d '{{\"model\":\"{model}\",\"messages\":[{{\"role\":\"user\",\"content\":\"Hello\"}}]}}'\n```\n"
+            f"  -d '{{\"model\":\"{model}\",\"messages\":[{{\"role\":\"user\",\"content\":\"Hello\"}}]}}'\n```\n\n"
+            "### Image input API example (Python 3)\n\n"
+            "Use this only if the selected model supports image input. Issuing a key does not enable vision. "
+            "For a multi-model key, change `model` below to an allowed vision alias if needed; "
+            "otherwise create a key for a vision model. This describes/reads an image; it does not generate images.\n\n"
+            "Save a local PNG as `image.png`, then run this script. Enter your user API key at the prompt. "
+            "The image is sent inline as base64, so the server does not need to fetch an external image URL.\n\n"
+            "```python\n"
+            "import base64\nimport getpass\nimport json\nfrom pathlib import Path\nimport urllib.request\n\n"
+            f"base_url = {json.dumps(base)}\n"
+            f"model = {json.dumps(model)}\n"
+            "api_key = getpass.getpass('API key: ')\n"
+            "image = base64.b64encode(Path('image.png').read_bytes()).decode('ascii')\n"
+            "payload = {\n"
+            "    'model': model,\n"
+            "    'messages': [{'role': 'user', 'content': [\n"
+            "        {'type': 'text', 'text': 'Describe this image and read any visible text.'},\n"
+            "        {'type': 'image_url', 'image_url': {'url': 'data:image/png;base64,' + image}},\n"
+            "    ]}],\n"
+            "    'max_tokens': 512,\n"
+            "}\n"
+            "request = urllib.request.Request(\n"
+            "    base_url + '/chat/completions',\n"
+            "    data=json.dumps(payload).encode('utf-8'),\n"
+            "    headers={'Authorization': 'Bearer ' + api_key, 'Content-Type': 'application/json'},\n"
+            ")\n"
+            "with urllib.request.urlopen(request, timeout=600) as response:\n"
+            "    result = json.load(response)\n"
+            "print(result['choices'][0]['message']['content'])\n"
+            "```\n\n"
+            "For JPEG input, use your `.jpg` file and `data:image/jpeg;base64,`. "
+            "Keep the total request below the proxy's 50 MB body limit; base64 increases image size by about one third.\n"
         )
 
     @staticmethod
